@@ -6,7 +6,7 @@ from sklearn.metrics import (
 )
 from kfold_tester import KFoldTester
 from directory import *
-from config import SAMPLING_FREQ, PHASE_ENSURING_MARGIN, WINDOW_SIZE
+from .config import SAMPLING_FREQ, PHASE_ENSURING_MARGIN, WINDOW_SIZE
 from obspy import UTCDateTime
 
 class TracesFilter:
