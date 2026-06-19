@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+_nb_src/
+
+.venv/
+venv/
+
+checkpoints/
+trained_models/
+results/
+preprocessed/
+
+.ipynb_checkpoints/
