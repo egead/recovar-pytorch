@@ -218,10 +218,10 @@ class DataGenerator(Dataset):
 
         x_batch = self.processed_hdf5.get(
             "data/x/chunk{}/{}".format(chunk_idx, batch_offset)
-        )
+        )[...]
         y_batch = self.processed_hdf5.get(
             "data/y/chunk{}/{}".format(chunk_idx, batch_offset)
-        )
+        )[...]
 
         return x_batch, y_batch
 
