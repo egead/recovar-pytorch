@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: recovar_torch
+Version: 0.1.0
+Requires-Python: >=3.10
+Requires-Dist: numpy>=2.0
+Requires-Dist: pandas
+Requires-Dist: scipy
+Requires-Dist: scikit-learn
+Requires-Dist: h5py
+Requires-Dist: obspy
+Requires-Dist: matplotlib
+Requires-Dist: seaborn
+Dynamic: requires-dist
+Dynamic: requires-python

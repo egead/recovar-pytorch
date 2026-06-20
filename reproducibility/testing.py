@@ -72,9 +72,7 @@ def _plot_roc(train_dataset, test_dataset):
     plt.grid(True)
     plt.savefig(f"{train_dataset}_on_{test_dataset}_tpr-fpr.png")
 
-DATASETS = [
-"instance", "SILIVRI2019", "BALIKESIR2025",
-]
+DATASETS = ["instance"]
 for dataset in DATASETS:
-    _eval_cross_testing("instance", dataset, "/mnt/second_drive/recovar_pytorch/instance_pytorch_test.csv")
+    _eval_cross_testing("instance", dataset, "/mnt/second_drive/recovar-pytorch/instance_pytorch_test.csv")
     _plot_roc("instance",dataset)
