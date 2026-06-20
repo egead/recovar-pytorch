@@ -1,11 +1,11 @@
 __pycache__/
 *.py[cod]
+*.egg-info/
 _nb_src/
 
 .venv/
 venv/
 
-checkpoints/
 trained_models/
 results/
 preprocessed/
