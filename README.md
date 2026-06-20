@@ -34,13 +34,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-Device is auto-detected (`torch.cuda.is_available()`) no code changes needed for GPU.
-
-## Dependency subsets
-
-- **Model / `model_test.ipynb` only:** torch, numpy, scikit-learn, matplotlib
-- **Full train/test harness:** + pandas, h5py, obspy
-- **Data prep (MSEED → HDF5):** numpy, obspy, h5py, scipy, pandas
+Device is auto-detected (`torch.cuda.is_available()`) 
 
 ## Run
 
