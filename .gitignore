@@ -9,5 +9,5 @@ venv/
 trained_models/
 results/
 preprocessed/
-
+recovar_torch.egg-info/
 .ipynb_checkpoints/
