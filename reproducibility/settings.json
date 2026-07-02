@@ -19,6 +19,13 @@
         "INSTANCE_EQ_METADATA_CSV_PATH": "/mnt/second_drive/instance_dset/metadata_Instance_events.csv"
     },
     "CUSTOM_DATASETS": {},
+    "SEISBENCH_DATASETS": {
+        "crlbd": {
+            "event_path": "/mnt/second_drive/ege/seisbench_data/datasets/crlbd/crlbd",
+            "noise_path": "/mnt/second_drive/ege/seisbench_data/datasets/crlbd/crlbdnoise",
+            "component_order": "ZNE"
+        }
+    },
     "PREPROCESSED_DATASET_DIRECTORY": "/mnt/data_a/ege/recovar_data_preprocessed",
     "TRAINED_MODELS_DIR": "/mnt/data_a/ege/recovar_models",
     "RESULTS_DIR": "/mnt/data_a/ege/recovar_results"
