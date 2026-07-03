@@ -18,7 +18,7 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     rows = []
     filters = [CropOffsetFilter()]
 
-    evaluator = SeisBenchEvaluator(exp_name = f"crlbd_pytorch",
+    evaluator = SeisBenchEvaluator(exp_name = f"recovar_crlbd",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
@@ -41,7 +41,7 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
 
 def _plot_roc(train_dataset, test_dataset):
     filters = [CropOffsetFilter()]
-    evaluator = SeisBenchEvaluator(exp_name = f"crlbd_pytorch",
+    evaluator = SeisBenchEvaluator(exp_name = f"recovar_crlbd",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
@@ -75,5 +75,5 @@ def _plot_roc(train_dataset, test_dataset):
 
 DATASETS = ["crlbd"]
 for dataset in DATASETS:
-    _eval_cross_testing("recovar_crlbd", dataset, "crlbd_pytorch_test.csv")
+    _eval_cross_testing("crlbd", dataset, "crlbd_test.csv")
     _plot_roc("crlbd", dataset)
