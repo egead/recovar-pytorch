@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 import pandas as pd
+from os import replace
 from os.path import exists
 from torch.utils.data import Dataset
 
@@ -216,7 +217,8 @@ class SeisBenchDataGenerator(Dataset):
             self.processed_hdf5.close()
 
     def _render_dataset(self):
-        with h5py.File(self.processed_hdf5_path, "w") as processed_hdf5:
+        tmp_path = self.processed_hdf5_path + ".tmp"
+        with h5py.File(tmp_path, "w") as processed_hdf5:
             for chunk_idx in range(len(self.chunk_metadata_list)):
                 bg = SeisBenchBatchGenerator(
                     event_dataset=self.event_dataset,
@@ -252,3 +254,5 @@ class SeisBenchDataGenerator(Dataset):
                     "metadata/chunk{}/{}".format(chunk_idx, "num_batches"),
                     data=n_chunk_batches,
                 )
+
+        replace(tmp_path, self.processed_hdf5_path)
