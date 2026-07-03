@@ -1,6 +1,6 @@
 from kfold_tester import KFoldTester
 from seisbench_kfold_environment import SeisBenchKFoldEnvironment
-from seisbench_kfold_trainer import load_seisbench_datasets
+from seisbench_kfold_trainer import load_seisbench_datasets, get_dataset_time_window
 
 
 class SeisBenchKFoldTester(KFoldTester):
@@ -16,6 +16,7 @@ class SeisBenchKFoldTester(KFoldTester):
             self.test_dataset,
             event_dataset=self.event_dataset,
             noise_dataset=self.noise_dataset,
+            dataset_time_window=get_dataset_time_window(self.test_dataset),
             apply_resampling=self.apply_resampling,
             resample_eq_ratio=self.resample_eq_ratio,
             resample_while_keeping_total_waveforms_fixed=self.resample_while_keeping_total_waveforms_fixed,

@@ -13,6 +13,13 @@ from seisbench.data import WaveformDataset
 from kfold_trainer import KfoldTrainer
 from seisbench_kfold_environment import SeisBenchKFoldEnvironment
 from directory import get_checkpoint_dir
+from config import INSTANCE_TIME_WINDOW
+
+
+def get_dataset_time_window(dataset):
+    return settings["SEISBENCH_DATASETS"][dataset].get(
+        "time_window", INSTANCE_TIME_WINDOW
+    )
 
 
 def load_seisbench_datasets(dataset):
@@ -55,6 +62,7 @@ class SeisBenchKfoldTrainer(KfoldTrainer):
             dataset=self.dataset,
             event_dataset=self.event_dataset,
             noise_dataset=self.noise_dataset,
+            dataset_time_window=get_dataset_time_window(self.dataset),
             apply_resampling=self.apply_resampling,
             resample_eq_ratio=self.resampling_eq_ratio,
             resample_while_keeping_total_waveforms_fixed=self.resample_while_keeping_total_waveforms_fixed,

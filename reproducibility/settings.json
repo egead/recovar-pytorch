@@ -27,7 +27,8 @@
         },
         "stead": {
             "seisbench_name": "STEAD",
-            "component_order": "ZNE"
+            "component_order": "ZNE",
+            "time_window": 60.0
         }
     },
     "SEISBENCH_CACHE_ROOT": "/mnt/second_drive/seisbench",
