@@ -3,7 +3,7 @@ from seisbench_kfold_trainer import SeisBenchKfoldTrainer
 
 MODEL_CLASSES = [RepresentationLearningMultipleAutoencoder]
 
-DATASETS = ["crlbd"]
+DATASETS = ["stead"]
 
 NUM_EPOCHS = 20
 for train_dataset in DATASETS:

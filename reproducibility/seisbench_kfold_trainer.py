@@ -1,6 +1,13 @@
 import json
-from os import makedirs
+from os import environ, makedirs
 
+with open("settings.json", "r") as file:
+    settings = json.load(file)
+
+if "SEISBENCH_CACHE_ROOT" in settings:
+    environ.setdefault("SEISBENCH_CACHE_ROOT", settings["SEISBENCH_CACHE_ROOT"])
+
+import seisbench.data as sbd
 from seisbench.data import WaveformDataset
 
 from kfold_trainer import KfoldTrainer
@@ -9,11 +16,18 @@ from directory import get_checkpoint_dir
 
 
 def load_seisbench_datasets(dataset):
-    with open("settings.json", "r") as file:
-        settings = json.load(file)
-
     dataset_config = settings["SEISBENCH_DATASETS"][dataset]
     component_order = dataset_config.get("component_order", "ZNE")
+
+    if "seisbench_name" in dataset_config:
+        full_dataset = getattr(sbd, dataset_config["seisbench_name"])(
+            sampling_rate=None,
+            component_order=component_order,
+        )
+        noise_mask = full_dataset.metadata["trace_category"] == "noise"
+        event_dataset = full_dataset.filter(~noise_mask, inplace=False)
+        noise_dataset = full_dataset.filter(noise_mask, inplace=False)
+        return event_dataset, noise_dataset
 
     event_dataset = WaveformDataset(
         dataset_config["event_path"],

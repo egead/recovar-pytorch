@@ -200,14 +200,16 @@ class SeisBenchKFoldEnvironment:
         eq_metadata = self._drop_short_traces(eq_metadata, min_ts)
         no_metadata = self._drop_short_traces(no_metadata, min_ts)
 
-        eq_metadata.rename(
-            columns={
-                "station_code": "station_name",
-                "trace_P_arrival_sample": "p_arrival_sample",
-                "trace_S_arrival_sample": "s_arrival_sample",
-            },
-            inplace=True,
-        )
+        rename_map = {"station_code": "station_name"}
+        for phase in ("p", "s"):
+            for col in (
+                f"trace_{phase.upper()}_arrival_sample",
+                f"trace_{phase}_arrival_sample",
+            ):
+                if col in eq_metadata.columns:
+                    rename_map[col] = f"{phase}_arrival_sample"
+                    break
+        eq_metadata.rename(columns=rename_map, inplace=True)
         no_metadata.rename(columns={"station_code": "station_name"}, inplace=True)
 
         if "source_id" in eq_metadata.columns:

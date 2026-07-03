@@ -24,8 +24,13 @@
             "event_path": "/mnt/second_drive/ege/seisbench_data/datasets/crlbd/crlbd",
             "noise_path": "/mnt/second_drive/ege/seisbench_data/datasets/crlbd/crlbdnoise",
             "component_order": "ZNE"
+        },
+        "stead": {
+            "seisbench_name": "STEAD",
+            "component_order": "ZNE"
         }
     },
+    "SEISBENCH_CACHE_ROOT": "/mnt/second_drive/seisbench",
     "PREPROCESSED_DATASET_DIRECTORY": "/mnt/data_a/ege/recovar_data_preprocessed",
     "TRAINED_MODELS_DIR": "/mnt/data_a/ege/recovar_models",
     "RESULTS_DIR": "/mnt/data_a/ege/recovar_results"
