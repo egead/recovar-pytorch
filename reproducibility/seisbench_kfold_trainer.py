@@ -7,19 +7,29 @@ with open("settings.json", "r") as file:
 if "SEISBENCH_CACHE_ROOT" in settings:
     environ.setdefault("SEISBENCH_CACHE_ROOT", settings["SEISBENCH_CACHE_ROOT"])
 
+import numpy as np
+import pandas as pd
 import seisbench.data as sbd
 from seisbench.data import WaveformDataset
 
 from kfold_trainer import KfoldTrainer
 from seisbench_kfold_environment import SeisBenchKFoldEnvironment
 from directory import get_checkpoint_dir
-from config import INSTANCE_TIME_WINDOW
+from config import INSTANCE_TIME_WINDOW, SAMPLING_FREQ, WINDOW_SIZE
 
 
-def get_dataset_time_window(dataset):
-    return settings["SEISBENCH_DATASETS"][dataset].get(
-        "time_window", INSTANCE_TIME_WINDOW
-    )
+def get_dataset_time_window(dataset, event_dataset=None):
+    time_window = settings["SEISBENCH_DATASETS"][dataset].get("time_window")
+    if time_window is not None:
+        return time_window
+    if event_dataset is None:
+        return INSTANCE_TIME_WINDOW
+    metadata = event_dataset.metadata
+    if "trace_npts" not in metadata.columns:
+        return INSTANCE_TIME_WINDOW
+    fs = metadata.get("trace_sampling_rate_hz", pd.Series(SAMPLING_FREQ, index=metadata.index))
+    seconds = metadata["trace_npts"] / fs
+    return float(np.clip(round(np.nanmedian(seconds)), WINDOW_SIZE, 180.0))
 
 
 def load_seisbench_datasets(dataset):
@@ -31,7 +41,15 @@ def load_seisbench_datasets(dataset):
             sampling_rate=None,
             component_order=component_order,
         )
-        noise_mask = full_dataset.metadata["trace_category"] == "noise"
+        filter_split = dataset_config.get("filter_split")
+        if filter_split is not None and "split" in full_dataset.metadata.columns:
+            full_dataset.filter(
+                full_dataset.metadata["split"].isin(filter_split), inplace=True
+            )
+        if "trace_category" in full_dataset.metadata.columns:
+            noise_mask = full_dataset.metadata["trace_category"] == "noise"
+        else:
+            noise_mask = pd.Series(False, index=full_dataset.metadata.index)
         event_dataset = full_dataset.filter(~noise_mask, inplace=False)
         noise_dataset = full_dataset.filter(noise_mask, inplace=False)
         return event_dataset, noise_dataset
@@ -62,7 +80,7 @@ class SeisBenchKfoldTrainer(KfoldTrainer):
             dataset=self.dataset,
             event_dataset=self.event_dataset,
             noise_dataset=self.noise_dataset,
-            dataset_time_window=get_dataset_time_window(self.dataset),
+            dataset_time_window=get_dataset_time_window(self.dataset, self.event_dataset),
             apply_resampling=self.apply_resampling,
             resample_eq_ratio=self.resampling_eq_ratio,
             resample_while_keeping_total_waveforms_fixed=self.resample_while_keeping_total_waveforms_fixed,

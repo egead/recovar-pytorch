@@ -196,7 +196,7 @@ class SeisBenchKFoldEnvironment:
         eq_metadata["sb_index"] = np.arange(len(eq_metadata))
         no_metadata["sb_index"] = np.arange(len(no_metadata))
 
-        min_ts = self._get_ts(self.model_time_window)
+        min_ts = self._get_ts(self.dataset_time_window)
         eq_metadata = self._drop_short_traces(eq_metadata, min_ts)
         no_metadata = self._drop_short_traces(no_metadata, min_ts)
 
@@ -212,6 +212,12 @@ class SeisBenchKFoldEnvironment:
         eq_metadata.rename(columns=rename_map, inplace=True)
         no_metadata.rename(columns={"station_code": "station_name"}, inplace=True)
 
+        if "trace_sampling_rate_hz" in eq_metadata.columns:
+            scale = self.sampling_freq / eq_metadata["trace_sampling_rate_hz"]
+            for col in ("p_arrival_sample", "s_arrival_sample"):
+                if col in eq_metadata.columns:
+                    eq_metadata[col] = eq_metadata[col] * scale
+
         if "source_id" in eq_metadata.columns:
             eq_metadata["source_id"] = eq_metadata["source_id"].astype(str)
         else:
@@ -226,6 +232,30 @@ class SeisBenchKFoldEnvironment:
 
         eq_metadata["label"] = "eq"
         no_metadata["label"] = "no"
+        eq_metadata["dataset_source"] = "eq"
+        no_metadata["dataset_source"] = "no"
+
+        unpicked = (
+            eq_metadata["p_arrival_sample"].isna()
+            & eq_metadata["s_arrival_sample"].isna()
+        )
+        eq_metadata.loc[unpicked, "label"] = "no"
+
+        window_ts = self._get_ts(self.dataset_time_window)
+        margin_ts = self._get_ts(self.phase_ensuring_margin)
+        first_arrival = eq_metadata[["p_arrival_sample", "s_arrival_sample"]].min(axis=1)
+        beyond_window = first_arrival >= window_ts
+        in_margin_gap = (first_arrival > window_ts - margin_ts) & ~beyond_window
+        eq_metadata.loc[beyond_window, "label"] = "no"
+        eq_metadata = eq_metadata[~in_margin_gap].reset_index(drop=True)
+
+        print(
+            f"{self.dataset}: time_window {self.dataset_time_window}s, "
+            f"eq {(eq_metadata['label'] == 'eq').sum()}, "
+            f"noise {(eq_metadata['label'] == 'no').sum() + len(no_metadata)} "
+            f"(unpicked {int(unpicked.sum())}, pick beyond window {int(beyond_window.sum())}, "
+            f"dropped margin gap {int(in_margin_gap.sum())})"
+        )
 
         keep = [
             "sb_index",
@@ -234,6 +264,7 @@ class SeisBenchKFoldEnvironment:
             "p_arrival_sample",
             "s_arrival_sample",
             "label",
+            "dataset_source",
         ]
         eq_metadata = eq_metadata[[c for c in keep if c in eq_metadata.columns]]
         no_metadata = no_metadata[[c for c in keep if c in no_metadata.columns]]
@@ -241,11 +272,13 @@ class SeisBenchKFoldEnvironment:
         standardized_metadata = pd.concat([eq_metadata, no_metadata], ignore_index=True)
         return standardized_metadata
 
-    @staticmethod
-    def _drop_short_traces(metadata, min_ts):
+    def _drop_short_traces(self, metadata, min_ts):
         for col in ("trace_npts", "trace_samples", "npts"):
             if col in metadata.columns:
-                return metadata[metadata[col] >= min_ts].reset_index(drop=True)
+                npts = metadata[col]
+                if "trace_sampling_rate_hz" in metadata.columns:
+                    npts = npts * self.sampling_freq / metadata["trace_sampling_rate_hz"]
+                return metadata[npts >= min_ts].reset_index(drop=True)
         return metadata
 
     def _make_chunk_metadata_multiple_of_batch_size(self, chunk_metadata_list):
@@ -437,6 +470,11 @@ class SeisBenchKFoldEnvironment:
             metadata["crop_offset_max"] - metadata["crop_offset_min"]
         ) * np.random.uniform(0, 1, len(metadata))
 
+        metadata["crop_offset"] = np.clip(
+            metadata["crop_offset"],
+            0,
+            self._get_ts(self.dataset_time_window) - self._get_ts(self.model_time_window),
+        )
         metadata["crop_offset"] = metadata["crop_offset"].astype(int)
 
         metadata.drop(

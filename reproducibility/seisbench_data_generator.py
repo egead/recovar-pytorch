@@ -59,13 +59,14 @@ class SeisBenchBatchGenerator:
                 "sb_index": int(row["sb_index"]),
                 "crop_offset": row["crop_offset"],
                 "label": row["label"],
+                "dataset_source": row.get("dataset_source", row["label"]),
             }
             waveforms.append(waveform)
 
         return waveforms
 
     def _get_source_waveform(self, waveform):
-        if waveform["label"] == "eq":
+        if waveform["dataset_source"] == "eq":
             wf = self.event_dataset.get_waveforms(
                 waveform["sb_index"], sampling_rate=self.sampling_freq
             )

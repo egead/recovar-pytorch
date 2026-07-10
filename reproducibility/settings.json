@@ -28,14 +28,67 @@
         "stead": {
             "seisbench_name": "STEAD",
             "component_order": "ZNE",
-            "time_window": 60.0
+            "time_window": 60.0,
+            "filter_split": [
+                "train"
+            ]
+        },
+        "instance": {
+            "seisbench_name": "InstanceCountsCombined",
+            "component_order": "ZNE",
+            "filter_split": [
+                "train"
+            ]
+        },
+        "ethz": {
+            "seisbench_name": "ETHZ",
+            "component_order": "ZNE",
+            "filter_split": [
+                "train"
+            ]
+        },
+        "geofon": {
+            "seisbench_name": "GEOFON",
+            "component_order": "ZNE",
+            "filter_split": [
+                "train"
+            ]
+        },
+        "iquique": {
+            "seisbench_name": "Iquique",
+            "component_order": "ZNE",
+            "filter_split": [
+                "train"
+            ]
+        },
+        "lendb": {
+            "seisbench_name": "LenDB",
+            "component_order": "ZNE",
+            "time_window": 30.0,
+            "filter_split": [
+                "train"
+            ]
+        },
+        "neic": {
+            "seisbench_name": "NEIC",
+            "component_order": "ZNE",
+            "filter_split": [
+                "train"
+            ]
+        },
+        "scedc": {
+            "seisbench_name": "SCEDC",
+            "component_order": "ZNE",
+            "filter_split": [
+                "train"
+            ]
         },
         "obs": {
             "time_window": 60.0
         }
     },
-    "SEISBENCH_CACHE_ROOT": "/mnt/second_drive/seisbench",
     "PREPROCESSED_DATASET_DIRECTORY": "/mnt/data_a/ege/recovar_data_preprocessed",
     "TRAINED_MODELS_DIR": "/mnt/data_a/ege/recovar_models",
-    "RESULTS_DIR": "/mnt/data_a/ege/recovar_results"
+    "RESULTS_DIR": "/mnt/data_a/ege/recovar_results",
+    "SEISBENCH_CACHE_ROOT": "/mnt/second_drive/seisbench"
 }
