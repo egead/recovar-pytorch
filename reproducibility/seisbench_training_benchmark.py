@@ -1,3 +1,4 @@
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -10,7 +11,21 @@ from recovar_torch import RepresentationLearningMultipleAutoencoder
 from seisbench_kfold_trainer import SeisBenchKfoldTrainer
 from directory import get_checkpoint_path, get_history_csv_path
 
-PICOVAR_MODELS_DIR = Path.home() / "picovar" / "models"
+
+def find_picovar_repo():
+    candidates = [
+        Path.home() / "picovar",
+        Path("/mnt/second_drive/ege/picovar"),
+    ]
+    if "PICOVAR_DIR" in os.environ:
+        candidates.insert(0, Path(os.environ["PICOVAR_DIR"]))
+    for candidate in candidates:
+        if (candidate / "picovar").is_dir():
+            return candidate
+    raise FileNotFoundError("picovar repo not found; set PICOVAR_DIR")
+
+
+PICOVAR_MODELS_DIR = find_picovar_repo() / "models"
 
 DATASETS = ["ethz", "geofon", "instance", "iquique", "neic", "scedc", "stead"]
 NUM_EPOCHS = 20
