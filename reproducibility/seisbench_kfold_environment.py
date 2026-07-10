@@ -3,6 +3,7 @@ import random
 from os.path import join, exists
 from os import makedirs
 
+import h5py
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
@@ -197,8 +198,8 @@ class SeisBenchKFoldEnvironment:
         no_metadata["sb_index"] = np.arange(len(no_metadata))
 
         min_ts = self._get_ts(self.dataset_time_window)
-        eq_metadata = self._drop_short_traces(eq_metadata, min_ts)
-        no_metadata = self._drop_short_traces(no_metadata, min_ts)
+        eq_metadata = self._drop_short_traces(eq_metadata, min_ts, event_dataset)
+        no_metadata = self._drop_short_traces(no_metadata, min_ts, noise_dataset)
 
         eq_metadata.rename(columns={"station_code": "station_name"}, inplace=True)
         no_metadata.rename(columns={"station_code": "station_name"}, inplace=True)
@@ -273,38 +274,46 @@ class SeisBenchKFoldEnvironment:
         standardized_metadata = pd.concat([eq_metadata, no_metadata], ignore_index=True)
         return standardized_metadata
 
-    def _drop_short_traces(self, metadata, min_ts):
-        npts = self._stored_npts(metadata)
-        if npts is None:
+    def _drop_short_traces(self, metadata, min_ts, dataset):
+        if len(metadata) == 0:
             return metadata
-        resampled = npts.to_numpy()
+        npts = self._stored_npts(metadata, dataset).to_numpy()
+        resampled = npts
         if "trace_sampling_rate_hz" in metadata.columns:
             rate = metadata["trace_sampling_rate_hz"].astype(float).to_numpy()
             fs = float(self.sampling_freq)
-            n = npts.to_numpy()
             resampled = np.where(
                 np.abs(fs / rate - 1) < 1e-4,
-                n,
+                npts,
                 np.where(
                     (rate % fs) < 1e-4,
-                    np.ceil(n / np.round(rate / fs)),
-                    np.floor(n * fs / rate),
+                    np.ceil(npts / np.round(rate / fs)),
+                    np.floor(npts * fs / rate),
                 ),
             )
         return metadata[resampled >= min_ts].reset_index(drop=True)
 
     @staticmethod
-    def _stored_npts(metadata):
-        if "trace_name" in metadata.columns:
-            names = metadata["trace_name"].astype(str)
-            if names.str.contains(r"\$").all():
-                extracted = names.str.extract(r":(\d+)$")[0]
-                if extracted.notna().all():
-                    return extracted.astype(float)
-        for col in ("trace_npts", "trace_samples", "npts"):
-            if col in metadata.columns:
-                return metadata[col].astype(float)
-        return None
+    def _stored_npts(metadata, dataset):
+        names = metadata["trace_name"].astype(str)
+        bucketed = names.str.contains(r"\$")
+        npts = pd.Series(np.nan, index=metadata.index)
+        if bucketed.any():
+            npts[bucketed] = (
+                names[bucketed].str.extract(r":(\d+)$")[0].astype(float).values
+            )
+        plain = ~bucketed
+        if plain.any():
+            if "trace_chunk" in metadata.columns:
+                chunks = metadata["trace_chunk"].fillna("").astype(str)
+            else:
+                chunks = pd.Series("", index=metadata.index)
+            for chunk in chunks[plain].unique():
+                sel = plain & (chunks == chunk)
+                with h5py.File(dataset.path / f"waveforms{chunk}.hdf5", "r") as f:
+                    g_data = f["data"]
+                    npts[sel] = [float(max(g_data[n].shape)) for n in names[sel]]
+        return npts
 
     def _make_chunk_metadata_multiple_of_batch_size(self, chunk_metadata_list):
         cropped_chunk_metadata_list = []
