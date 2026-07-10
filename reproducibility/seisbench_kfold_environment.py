@@ -276,9 +276,12 @@ class SeisBenchKFoldEnvironment:
         for col in ("trace_npts", "trace_samples", "npts"):
             if col in metadata.columns:
                 npts = metadata[col]
+                slack = 0
                 if "trace_sampling_rate_hz" in metadata.columns:
-                    npts = npts * self.sampling_freq / metadata["trace_sampling_rate_hz"]
-                return metadata[npts >= min_ts].reset_index(drop=True)
+                    rate = metadata["trace_sampling_rate_hz"]
+                    npts = npts * self.sampling_freq / rate
+                    slack = (rate != self.sampling_freq).astype(int)
+                return metadata[npts >= min_ts + slack].reset_index(drop=True)
         return metadata
 
     def _make_chunk_metadata_multiple_of_batch_size(self, chunk_metadata_list):

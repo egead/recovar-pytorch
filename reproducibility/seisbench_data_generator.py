@@ -88,6 +88,12 @@ class SeisBenchBatchGenerator:
             wf = self._get_source_waveform(waveform)
 
             wf = wf[:n_ts_dataset, :]
+            if wf.shape[0] < n_ts_dataset:
+                raise ValueError(
+                    f"trace too short after resampling: sb_index {waveform['sb_index']} "
+                    f"({waveform['dataset_source']} dataset), got {wf.shape[0]} samples, "
+                    f"expected {n_ts_dataset}"
+                )
 
             x.append(wf)
             crop_offsets.append(waveform["crop_offset"])
