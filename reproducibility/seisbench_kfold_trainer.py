@@ -44,12 +44,15 @@ def load_seisbench_datasets(dataset):
         filter_split = dataset_config.get("filter_split")
         if filter_split is not None and "split" in full_dataset.metadata.columns:
             full_dataset.filter(
-                full_dataset.metadata["split"].isin(filter_split), inplace=True
+                full_dataset.metadata["split"].isin(filter_split).to_numpy(),
+                inplace=True,
             )
         if "trace_category" in full_dataset.metadata.columns:
-            noise_mask = full_dataset.metadata["trace_category"] == "noise"
+            noise_mask = (
+                full_dataset.metadata["trace_category"] == "noise"
+            ).to_numpy()
         else:
-            noise_mask = pd.Series(False, index=full_dataset.metadata.index)
+            noise_mask = np.zeros(len(full_dataset.metadata), dtype=bool)
         event_dataset = full_dataset.filter(~noise_mask, inplace=False)
         noise_dataset = full_dataset.filter(noise_mask, inplace=False)
         return event_dataset, noise_dataset
