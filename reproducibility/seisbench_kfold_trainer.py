@@ -25,10 +25,16 @@ def get_dataset_time_window(dataset, event_dataset=None):
     if event_dataset is None:
         return INSTANCE_TIME_WINDOW
     metadata = event_dataset.metadata
-    if "trace_npts" not in metadata.columns:
-        return INSTANCE_TIME_WINDOW
-    fs = metadata.get("trace_sampling_rate_hz", pd.Series(SAMPLING_FREQ, index=metadata.index))
-    seconds = metadata["trace_npts"] / fs
+    sample = metadata.sample(min(len(metadata), 5000), random_state=0)
+    try:
+        npts = SeisBenchKFoldEnvironment._stored_npts(sample, event_dataset)
+    except Exception:
+        if "trace_npts" not in metadata.columns:
+            return INSTANCE_TIME_WINDOW
+        sample = metadata
+        npts = metadata["trace_npts"].astype(float)
+    fs = sample.get("trace_sampling_rate_hz", pd.Series(SAMPLING_FREQ, index=sample.index))
+    seconds = npts / fs
     return float(np.clip(round(np.nanmedian(seconds)), WINDOW_SIZE, 180.0))
 
 

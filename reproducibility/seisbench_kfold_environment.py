@@ -251,12 +251,22 @@ class SeisBenchKFoldEnvironment:
         eq_metadata.loc[beyond_window, "label"] = "no"
         eq_metadata = eq_metadata[~in_margin_gap].reset_index(drop=True)
 
+        eq_metadata["noise_before_sample"] = np.nan
+        no_metadata["noise_before_sample"] = np.nan
+        model_ts = self._get_ts(self.model_time_window)
+        first_arrival = eq_metadata[["p_arrival_sample", "s_arrival_sample"]].min(axis=1)
+        prenoise = eq_metadata[
+            (eq_metadata["label"] == "eq") & (first_arrival > model_ts)
+        ].copy()
+        prenoise["label"] = "no"
+        prenoise["noise_before_sample"] = first_arrival[prenoise.index]
+
         print(
             f"{self.dataset}: time_window {self.dataset_time_window}s, "
             f"eq {(eq_metadata['label'] == 'eq').sum()}, "
-            f"noise {(eq_metadata['label'] == 'no').sum() + len(no_metadata)} "
+            f"noise {(eq_metadata['label'] == 'no').sum() + len(no_metadata) + len(prenoise)} "
             f"(unpicked {int(unpicked.sum())}, pick beyond window {int(beyond_window.sum())}, "
-            f"dropped margin gap {int(in_margin_gap.sum())})"
+            f"pre-arrival noise {len(prenoise)}, dropped margin gap {int(in_margin_gap.sum())})"
         )
 
         keep = [
@@ -267,11 +277,15 @@ class SeisBenchKFoldEnvironment:
             "s_arrival_sample",
             "label",
             "dataset_source",
+            "noise_before_sample",
         ]
         eq_metadata = eq_metadata[[c for c in keep if c in eq_metadata.columns]]
         no_metadata = no_metadata[[c for c in keep if c in no_metadata.columns]]
+        prenoise = prenoise[[c for c in keep if c in prenoise.columns]]
 
-        standardized_metadata = pd.concat([eq_metadata, no_metadata], ignore_index=True)
+        standardized_metadata = pd.concat(
+            [eq_metadata, prenoise, no_metadata], ignore_index=True
+        )
         return standardized_metadata
 
     def _drop_short_traces(self, metadata, min_ts, dataset):
@@ -287,7 +301,7 @@ class SeisBenchKFoldEnvironment:
                 npts,
                 np.where(
                     (rate % fs) < 1e-4,
-                    np.ceil(npts / np.round(rate / fs)),
+                    np.ceil(npts / np.maximum(np.round(rate / fs), 1)),
                     np.floor(npts * fs / rate),
                 ),
             )
@@ -498,6 +512,14 @@ class SeisBenchKFoldEnvironment:
             [metadata_eq_pick_ensured_crop, metadata_eq_random_crop, metadata_no],
             axis=0,
         )
+
+        if "noise_before_sample" in metadata.columns:
+            noise_before = metadata["noise_before_sample"]
+            constrained = noise_before.notna()
+            metadata.loc[constrained, "crop_offset_max"] = np.minimum(
+                metadata.loc[constrained, "crop_offset_max"],
+                noise_before[constrained] - self._get_ts(self.model_time_window),
+            )
 
         np.random.seed(0)
         metadata["crop_offset"] = metadata["crop_offset_min"] + (

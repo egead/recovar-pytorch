@@ -51,6 +51,9 @@ for dataset in DATASETS:
     history = pd.read_csv(
         get_history_csv_path(exp_name, trainer.model_name, dataset, SPLIT)
     )
+    if history["val_loss"].isna().all():
+        print(f"{dataset}: training produced no valid loss (empty dataset?), NOT copying a model")
+        continue
     best_epoch = int(history["val_loss"].idxmin())
     checkpoint = get_checkpoint_path(
         exp_name, trainer.model_name, dataset, SPLIT, best_epoch
