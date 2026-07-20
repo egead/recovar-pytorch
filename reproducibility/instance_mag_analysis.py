@@ -273,18 +273,34 @@ def main():
         f"{index * 20}–{(index + 1) * 20}%\nM {left:.2f}–{right:.2f}"
         for index, (left, right) in enumerate(zip(edges[:-1], edges[1:]))
     ]
-    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    fig, ax = plt.subplots(figsize=(7.8, 4.8))
     colors = {"RECOVAR-INSTANCE": "#3b6ea8", "PhaseNet-INSTANCE": "#8b5ea7"}
-    for model_name in models:
+    x = np.arange(len(labels))
+    width = 0.8 / len(models)
+    for model_index, model_name in enumerate(models):
         model_rows = summary.loc[summary["model"].eq(model_name)]
-        ax.plot(np.arange(len(model_rows)), model_rows["roc_auc"], marker="o", linewidth=1.8, label=model_name, color=colors[model_name])
-    ax.set_xticks(np.arange(len(labels)), labels)
-    ax.set_ylim(0.45, 1.01)
-    ax.set_xlabel("Test-event magnitude percentile and interval")
+        offset = (model_index - (len(models) - 1) / 2) * width
+        bars = ax.bar(
+            x + offset,
+            model_rows["roc_auc"].to_numpy(),
+            width=width,
+            color=colors[model_name],
+            edgecolor="0.2",
+            linewidth=0.5,
+            label=model_name,
+        )
+        for bar, count in zip(bars, model_rows["n_events"].to_numpy()):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.012, f"n={count}", ha="center", va="bottom", fontsize=7, rotation=90)
+    ax.axhline(0.5, color="0.35", linestyle="--", linewidth=0.8)
+    ax.set_xticks(x, labels, rotation=45, ha="right")
+    ax.set_ylim(0.45, 1.08)
+    ax.set_xlabel("Magnitude interval")
     ax.set_ylabel("ROC-AUC")
-    ax.set_title("INSTANCE detection performance by magnitude")
-    ax.grid(axis="y", color="0.88", linewidth=0.7)
-    ax.legend(frameon=False, fontsize=8)
+    ax.set_title("INSTANCE test-set detection")
+    ax.grid(axis="y", color="0.88", linewidth=0.6)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, fontsize=8, ncol=1, loc="center left", bbox_to_anchor=(1.01, 0.5), handlelength=1.4, labelspacing=0.45)
     fig.tight_layout()
     fig.savefig(OUTPUT / "instance_auc_by_magnitude.pdf", bbox_inches="tight")
     fig.savefig(OUTPUT / "instance_auc_by_magnitude.png", dpi=300, bbox_inches="tight")
