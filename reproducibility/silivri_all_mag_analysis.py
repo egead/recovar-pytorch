@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 from collections import OrderedDict
 from pathlib import Path
 
@@ -178,25 +179,32 @@ def raw_window(entries, station, start, stream_cache):
     stream = obspy.Stream()
     for path in paths:
         if path not in stream_cache:
-            stream_cache[path] = obspy.read(str(path))
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                stream_cache[path] = obspy.read(str(path))
+            for warning in caught:
+                print(f"MiniSEED warning in {path}: {warning.message}")
             stream_cache.move_to_end(path)
             while len(stream_cache) > 6:
                 stream_cache.popitem(last=False)
         stream += stream_cache[path].copy().trim(start - 1, end + 1)
     stream = obspy.Stream([trace for trace in stream if trace.stats.station.upper() == station])
-    stream.merge(method=1, fill_value=0)
+    stream.merge(method=1, fill_value=None)
     components = []
     for component in "ZNE":
         candidates = [trace.copy() for trace in stream if trace.stats.channel.upper().endswith(component)]
         if not candidates:
             raise RuntimeError(f"missing {component} component for {station} at {start}")
         trace = max(candidates, key=lambda candidate: candidate.stats.npts)
+        trace.trim(start - 1, end + 1)
         if abs(trace.stats.sampling_rate - SAMPLING_RATE) > 1e-6:
             trace.resample(SAMPLING_RATE)
-        trace.trim(start, end - 1 / SAMPLING_RATE, pad=True, fill_value=0, nearest_sample=False)
+        trace.trim(start, end - 1 / SAMPLING_RATE, pad=True, fill_value=None, nearest_sample=False)
+        if np.ma.isMaskedArray(trace.data) and np.ma.getmaskarray(trace.data).any():
+            raise RuntimeError(f"data gap in {component} component for {station} at {start}")
         data = np.asarray(trace.data, dtype=np.float32)
-        if len(data) < WINDOW_SAMPLES:
-            data = np.pad(data, (0, WINDOW_SAMPLES - len(data)))
+        if len(data) != WINDOW_SAMPLES:
+            raise RuntimeError(f"incomplete {component} component for {station} at {start}")
         components.append(data[:WINDOW_SAMPLES])
     window = np.stack(components)
     if not np.isfinite(window).all():
@@ -243,6 +251,8 @@ def load_partial(descriptors):
     count = len(descriptors)
     recovar_scores = np.full(count, np.nan, dtype=np.float32)
     phasenet_scores = np.full(count, np.nan, dtype=np.float32)
+    states = np.zeros(count, dtype=np.int8)
+    exclusion_reasons = np.full(count, "", dtype="<U512")
     signature = descriptor_signature(descriptors)
     if PARTIAL_CACHE.exists():
         partial = np.load(PARTIAL_CACHE)
@@ -250,20 +260,33 @@ def load_partial(descriptors):
             raise ValueError(f"partial cache does not match the current Silivri descriptors: {PARTIAL_CACHE}")
         recovar_scores[:] = partial["recovar_scores"]
         phasenet_scores[:] = partial["phasenet_scores"]
-    return recovar_scores, phasenet_scores, signature
+        if "states" in partial:
+            states[:] = partial["states"]
+        else:
+            states[np.isfinite(recovar_scores) & np.isfinite(phasenet_scores)] = 1
+        if "exclusion_reasons" in partial:
+            exclusion_reasons[:] = partial["exclusion_reasons"].astype(str)
+    return recovar_scores, phasenet_scores, states, exclusion_reasons, signature
 
 
-def save_partial(recovar_scores, phasenet_scores, signature):
+def save_partial(recovar_scores, phasenet_scores, states, exclusion_reasons, signature):
     temporary = PARTIAL_CACHE.with_suffix(".tmp.npz")
-    np.savez_compressed(temporary, recovar_scores=recovar_scores, phasenet_scores=phasenet_scores, signature=signature)
+    np.savez_compressed(
+        temporary,
+        recovar_scores=recovar_scores,
+        phasenet_scores=phasenet_scores,
+        states=states,
+        exclusion_reasons=exclusion_reasons,
+        signature=signature,
+    )
     temporary.replace(PARTIAL_CACHE)
 
 
 def score_descriptors(descriptors):
-    recovar_scores, phasenet_scores, signature = load_partial(descriptors)
-    if np.isfinite(recovar_scores).all() and np.isfinite(phasenet_scores).all():
+    recovar_scores, phasenet_scores, states, exclusion_reasons, signature = load_partial(descriptors)
+    if np.all(states != 0):
         print(f"Detection scores loaded from {PARTIAL_CACHE}")
-        return recovar_scores, phasenet_scores
+        return recovar_scores, phasenet_scores, states, exclusion_reasons
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
     recovar, phasenet, noise_index = load_models(device)
@@ -274,12 +297,15 @@ def score_descriptors(descriptors):
     with h5py.File(WAVEFORMS, "r") as hdf5, torch.inference_mode():
         for batch_index, begin in enumerate(range(0, len(descriptors), BATCH_SIZE)):
             end = min(begin + BATCH_SIZE, len(descriptors))
-            if np.isfinite(recovar_scores[begin:end]).all() and np.isfinite(phasenet_scores[begin:end]).all():
+            if np.all(states[begin:end] != 0):
                 print(f"Detection completed:{batch_index + 1}/{total_batches} cached")
                 continue
             recovar_windows = []
             raw_windows = []
-            for row in descriptors.iloc[begin:end].itertuples():
+            valid_indices = []
+            for descriptor_index, row in zip(range(begin, end), descriptors.iloc[begin:end].itertuples()):
+                if states[descriptor_index] != 0:
+                    continue
                 station = str(row.station_name).upper()
                 if station not in directories:
                     candidates = [path for key, path in directories.items() if station in key]
@@ -290,29 +316,45 @@ def score_descriptors(descriptors):
                     directory = directories[station]
                 if station not in indices:
                     indices[station] = waveform_index(directory, station)
-                recovar_windows.append(recovar_window(hdf5, row.trace_name, int(row.crop_offset)))
-                raw_windows.append(raw_window(indices[station], station, row.window_start, stream_cache))
-            recovar_input = torch.from_numpy(np.stack(recovar_windows)).float().to(device)
-            recovar_scores[begin:end] = recovar(recovar_input).cpu().numpy()
-            phasenet_input = torch.from_numpy(phasenet_preprocess(np.stack(raw_windows))).to(device)
-            phasenet_output = phasenet(phasenet_input)
-            if isinstance(phasenet_output, (tuple, list)):
-                phasenet_output = phasenet_output[0]
-            phasenet_scores[begin:end] = (1.0 - phasenet_output[:, noise_index, :]).amax(dim=1).cpu().numpy()
-            save_partial(recovar_scores, phasenet_scores, signature)
-            print(f"Detection completed:{batch_index + 1}/{total_batches}")
-    return recovar_scores, phasenet_scores
+                try:
+                    raw = raw_window(indices[station], station, row.window_start, stream_cache)
+                    recovar_data = recovar_window(hdf5, row.trace_name, int(row.crop_offset))
+                except (KeyError, RuntimeError, ValueError) as error:
+                    states[descriptor_index] = -1
+                    exclusion_reasons[descriptor_index] = str(error)
+                    print(f"Excluded {row.trace_name}: {error}")
+                    continue
+                recovar_windows.append(recovar_data)
+                raw_windows.append(raw)
+                valid_indices.append(descriptor_index)
+            if valid_indices:
+                recovar_input = torch.from_numpy(np.stack(recovar_windows)).float().to(device)
+                recovar_scores[valid_indices] = recovar(recovar_input).cpu().numpy()
+                phasenet_input = torch.from_numpy(phasenet_preprocess(np.stack(raw_windows))).to(device)
+                phasenet_output = phasenet(phasenet_input)
+                if isinstance(phasenet_output, (tuple, list)):
+                    phasenet_output = phasenet_output[0]
+                phasenet_scores[valid_indices] = (1.0 - phasenet_output[:, noise_index, :]).amax(dim=1).cpu().numpy()
+                states[valid_indices] = 1
+            save_partial(recovar_scores, phasenet_scores, states, exclusion_reasons, signature)
+            print(f"Detection completed:{batch_index + 1}/{total_batches} excluded:{int((states == -1).sum())}")
+    return recovar_scores, phasenet_scores, states, exclusion_reasons
 
 
 def build_analysis_cache():
     descriptors, picks = prepare_descriptors()
     print(f"matched event station records: {(descriptors['kind'] == 'event').sum()}")
     print(f"noise calibration/validation windows: {(descriptors['kind'] == 'noise').sum()}")
-    recovar_scores, phasenet_scores = score_descriptors(descriptors)
-    events = descriptors.loc[descriptors["kind"].eq("event")].copy()
-    event_mask = descriptors["kind"].eq("event").to_numpy()
-    noise_calibration = descriptors["noise_role"].eq("calibration").to_numpy()
-    noise_validation = descriptors["noise_role"].eq("validation").to_numpy()
+    recovar_scores, phasenet_scores, states, exclusion_reasons = score_descriptors(descriptors)
+    valid = states == 1
+    events = descriptors.loc[descriptors["kind"].eq("event") & valid].copy()
+    event_mask = descriptors["kind"].eq("event").to_numpy() & valid
+    noise_calibration = descriptors["noise_role"].eq("calibration").to_numpy() & valid
+    noise_validation = descriptors["noise_role"].eq("validation").to_numpy() & valid
+    print(f"excluded raw windows: {(states == -1).sum()}")
+    excluded = descriptors.loc[states == -1, ["trace_name", "station_name", "window_start", "kind"]].copy()
+    excluded["reason"] = exclusion_reasons[states == -1]
+    excluded.to_csv(OUTPUT / "silivri_excluded_windows.csv", index=False)
     start = descriptors["trace_start"].min()
     end = descriptors["trace_start"].max()
     truth = picks.loc[picks["pick_orgtime"].between(start, end)].groupby("event_id")["magnitude"].first()
