@@ -6,7 +6,6 @@ from pathlib import Path
 
 os.environ.setdefault("SEISBENCH_CACHE_ROOT", "/mnt/second_drive/seisbench")
 
-import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import obspy
@@ -14,6 +13,7 @@ import pandas as pd
 import seisbench.models as sbm
 import torch
 from obspy import UTCDateTime
+from scipy.signal import butter, detrend, sosfiltfilt
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -25,7 +25,6 @@ from recovar_torch import ClassifierMultipleAutoencoder, RepresentationLearningM
 ROOT = Path("/mnt/data_a/ege")
 SILIVRI_OUTPUT = ROOT / "RECOVAR_SILIVRI2019" / "output"
 METADATA = SILIVRI_OUTPUT / "SILIVRI2019_metadata.csv"
-WAVEFORMS = SILIVRI_OUTPUT / "SILIVRI2019_waveforms.hdf5"
 RAW = Path("/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/prepared_waveforms/day_by_day")
 PICKS = Path("/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv")
 CATALOG_CANDIDATES = [
@@ -36,19 +35,21 @@ CHECKPOINT_CANDIDATES = [
     Path("/mnt/second_drive/ege/picovar/models/recovar_instance_seisbench_benchmark.pt"),
     Path.home() / "picovar/models/recovar_instance_seisbench_benchmark.pt",
 ]
-PARTIAL_CACHE = REPO / "silivri_all_instance_scores_partial.npz"
-ANALYSIS_CACHE = REPO / "silivri_all_instance_mag_cache.npz"
-OUTPUT = REPO / "silivri_all_magnitude_analysis"
+PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_scores_partial.npz"
+ANALYSIS_CACHE = REPO / "silivri_all_instance_butterworth_mag_cache.npz"
+OUTPUT = REPO / "silivri_all_butterworth_magnitude_analysis"
 SAMPLING_RATE = 100
 SOURCE_SAMPLES = 6000
 WINDOW_SAMPLES = 3000
 BATCH_SIZE = 256
+CPU_THREADS = max(1, len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1)
 NOISE_SAMPLE_SIZE = 40000
 MAGNITUDE_BIN_WIDTH = 0.5
 HISTOGRAM_STEP = 0.25
 BOOTSTRAP_REPETITIONS = 1000
 FALSE_POSITIVE_RATES = [0.001, 0.01]
 MATCH_TOLERANCE_SECONDS = 0.05
+BUTTERWORTH_SOS = butter(4, (1.0, 20.0), btype="bandpass", fs=SAMPLING_RATE, output="sos")
 
 
 def existing_path(candidates, description):
@@ -212,15 +213,12 @@ def raw_window(entries, station, start, stream_cache):
     return window
 
 
-def recovar_window(hdf5, trace_name, crop_offset):
-    data = np.asarray(hdf5[f"data/{trace_name}"][...], dtype=np.float32)
-    if data.shape[0] != SOURCE_SAMPLES and data.shape[1] == SOURCE_SAMPLES:
-        data = data.T
-    data = data[:, [2, 1, 0]]
-    data = data[crop_offset:crop_offset + WINDOW_SAMPLES]
-    data -= data.mean(axis=0, keepdims=True)
-    norm = np.sqrt(np.sum(np.square(data), axis=0, keepdims=True))
-    return data / (1e-37 + norm)
+def recovar_preprocess(windows):
+    output = detrend(windows.astype(np.float64), axis=2, type="linear")
+    output = sosfiltfilt(BUTTERWORTH_SOS, output, axis=2).astype(np.float32)
+    norm = np.sqrt(np.sum(np.square(output), axis=2, keepdims=True))
+    output /= 1e-37 + norm
+    return np.transpose(output, (0, 2, 1))
 
 
 def phasenet_preprocess(windows):
@@ -289,18 +287,20 @@ def score_descriptors(descriptors):
         return recovar_scores, phasenet_scores, states, exclusion_reasons
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
+    if device.type == "cpu":
+        torch.set_num_threads(CPU_THREADS)
+        print(f"CPU threads: {torch.get_num_threads()}")
     recovar, phasenet, noise_index = load_models(device)
     directories = station_directories()
     indices = {}
     stream_cache = OrderedDict()
     total_batches = int(np.ceil(len(descriptors) / BATCH_SIZE))
-    with h5py.File(WAVEFORMS, "r") as hdf5, torch.inference_mode():
+    with torch.inference_mode():
         for batch_index, begin in enumerate(range(0, len(descriptors), BATCH_SIZE)):
             end = min(begin + BATCH_SIZE, len(descriptors))
             if np.all(states[begin:end] != 0):
                 print(f"Detection completed:{batch_index + 1}/{total_batches} cached")
                 continue
-            recovar_windows = []
             raw_windows = []
             valid_indices = []
             for descriptor_index, row in zip(range(begin, end), descriptors.iloc[begin:end].itertuples()):
@@ -318,19 +318,18 @@ def score_descriptors(descriptors):
                     indices[station] = waveform_index(directory, station)
                 try:
                     raw = raw_window(indices[station], station, row.window_start, stream_cache)
-                    recovar_data = recovar_window(hdf5, row.trace_name, int(row.crop_offset))
                 except (KeyError, RuntimeError, ValueError) as error:
                     states[descriptor_index] = -1
                     exclusion_reasons[descriptor_index] = str(error)
                     print(f"Excluded {row.trace_name}: {error}")
                     continue
-                recovar_windows.append(recovar_data)
                 raw_windows.append(raw)
                 valid_indices.append(descriptor_index)
             if valid_indices:
-                recovar_input = torch.from_numpy(np.stack(recovar_windows)).float().to(device)
+                raw_batch = np.stack(raw_windows)
+                recovar_input = torch.from_numpy(recovar_preprocess(raw_batch)).to(device)
                 recovar_scores[valid_indices] = recovar(recovar_input).cpu().numpy()
-                phasenet_input = torch.from_numpy(phasenet_preprocess(np.stack(raw_windows))).to(device)
+                phasenet_input = torch.from_numpy(phasenet_preprocess(raw_batch)).to(device)
                 phasenet_output = phasenet(phasenet_input)
                 if isinstance(phasenet_output, (tuple, list)):
                     phasenet_output = phasenet_output[0]
