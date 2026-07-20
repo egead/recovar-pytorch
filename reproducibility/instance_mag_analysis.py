@@ -30,7 +30,7 @@ OUTPUT = REPO / "instance_magnitude_analysis"
 SAMPLING_RATE = 100
 WINDOW_SAMPLES = 3000
 BATCH_SIZE = 256
-N_BINS = 5
+N_BINS = 10
 HISTOGRAM_STEP = 0.25
 PHASE_COLUMNS = [
     "trace_p_arrival_sample",
@@ -224,7 +224,8 @@ def save_histogram(values, title, filename, percentile_edges=None):
     fig, ax = plt.subplots(figsize=(6.4, 4.0))
     ax.hist(values, bins=histogram_edges(values), color="0.45", edgecolor="white", linewidth=0.7)
     if percentile_edges is not None:
-        for percentile, edge in zip([20, 40, 60, 80], percentile_edges[1:-1]):
+        percentiles = np.arange(1, len(percentile_edges) - 1) * 100 / (len(percentile_edges) - 1)
+        for percentile, edge in zip(percentiles, percentile_edges[1:-1]):
             ax.axvline(edge, color="0.2", linestyle="--", linewidth=0.9, label=f"{percentile}th percentile")
     ax.set_xlabel("Magnitude")
     ax.set_ylabel("Number of earthquakes")
@@ -250,8 +251,13 @@ def main():
         "RECOVAR-INSTANCE": (cache["recovar_event_scores"], cache["recovar_noise_scores"]),
         "PhaseNet-INSTANCE": (cache["phasenet_event_scores"], cache["phasenet_noise_scores"]),
     }
+    percentile_step = 100 / N_BINS
     rows = []
     for model_name, (event_scores, noise_scores) in models.items():
+        thresholds = {
+            0.001: np.quantile(noise_scores, 0.999, method="higher"),
+            0.01: np.quantile(noise_scores, 0.99, method="higher"),
+        }
         for index, (left, right) in enumerate(zip(edges[:-1], edges[1:])):
             selected = (magnitudes >= left) & (magnitudes < right)
             labels = np.concatenate([np.ones(selected.sum()), np.zeros(len(noise_scores))])
@@ -259,21 +265,27 @@ def main():
             rows.append(
                 {
                     "model": model_name,
-                    "percentile_left": index * 20,
-                    "percentile_right": (index + 1) * 20,
+                    "percentile_left": index * percentile_step,
+                    "percentile_right": (index + 1) * percentile_step,
                     "magnitude_left": left,
                     "magnitude_right": right,
                     "n_events": int(selected.sum()),
                     "roc_auc": roc_auc_score(labels, values),
+                    "threshold_at_fpr_0_001": thresholds[0.001],
+                    "actual_fpr_0_001": np.mean(noise_scores >= thresholds[0.001]),
+                    "recall_at_fpr_0_001": np.mean(event_scores[selected] >= thresholds[0.001]),
+                    "threshold_at_fpr_0_01": thresholds[0.01],
+                    "actual_fpr_0_01": np.mean(noise_scores >= thresholds[0.01]),
+                    "recall_at_fpr_0_01": np.mean(event_scores[selected] >= thresholds[0.01]),
                 }
             )
     summary = pd.DataFrame(rows)
     summary.to_csv(OUTPUT / "instance_auc_by_magnitude.csv", index=False)
     labels = [
-        f"{index * 20}–{(index + 1) * 20}%\nM {left:.2f}–{right:.2f}"
+        f"{index * percentile_step:.0f}–{(index + 1) * percentile_step:.0f}%\nM {left:.2f}–{right:.2f}"
         for index, (left, right) in enumerate(zip(edges[:-1], edges[1:]))
     ]
-    fig, ax = plt.subplots(figsize=(7.8, 4.8))
+    fig, ax = plt.subplots(figsize=(11.0, 5.0))
     colors = {"RECOVAR-INSTANCE": "#3b6ea8", "PhaseNet-INSTANCE": "#8b5ea7"}
     x = np.arange(len(labels))
     width = 0.8 / len(models)
@@ -304,6 +316,31 @@ def main():
     fig.tight_layout()
     fig.savefig(OUTPUT / "instance_auc_by_magnitude.pdf", bbox_inches="tight")
     fig.savefig(OUTPUT / "instance_auc_by_magnitude.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    fig, ax = plt.subplots(figsize=(11.0, 5.0))
+    recall_series = [
+        ("RECOVAR-INSTANCE", "recall_at_fpr_0_001", "RECOVAR, FPR 0.1%", "#3b6ea8"),
+        ("PhaseNet-INSTANCE", "recall_at_fpr_0_001", "PhaseNet, FPR 0.1%", "#8b5ea7"),
+        ("RECOVAR-INSTANCE", "recall_at_fpr_0_01", "RECOVAR, FPR 1%", "#86afd3"),
+        ("PhaseNet-INSTANCE", "recall_at_fpr_0_01", "PhaseNet, FPR 1%", "#bea6cf"),
+    ]
+    width = 0.8 / len(recall_series)
+    for series_index, (model_name, column, legend, color) in enumerate(recall_series):
+        values = summary.loc[summary["model"].eq(model_name), column].to_numpy()
+        offset = (series_index - (len(recall_series) - 1) / 2) * width
+        ax.bar(x + offset, values, width=width, color=color, edgecolor="0.2", linewidth=0.5, label=legend)
+    ax.set_xticks(x, labels, rotation=45, ha="right")
+    ax.set_ylim(0.0, 1.03)
+    ax.set_xlabel("Magnitude interval")
+    ax.set_ylabel("Recall")
+    ax.set_title("INSTANCE test-set recall at fixed false-positive rates")
+    ax.grid(axis="y", color="0.88", linewidth=0.6)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, fontsize=8, ncol=2, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(OUTPUT / "instance_recall_by_magnitude.pdf", bbox_inches="tight")
+    fig.savefig(OUTPUT / "instance_recall_by_magnitude.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
     save_histogram(cache["full_magnitudes"], "INSTANCE catalog magnitude distribution", "instance_catalog_magnitude_histogram")
     save_histogram(magnitudes, "INSTANCE official test-set magnitude distribution", "instance_test_magnitude_histogram", edges)
