@@ -212,7 +212,7 @@ def build_cache():
     np.savez_compressed(
         CACHE,
         analysis_level=np.asarray("station_window_v1"),
-        event_source_ids=events["source_id"].astype(str).to_numpy(),
+        event_source_ids=events["source_id"].astype(str).to_numpy(dtype=str),
         event_magnitudes=events["magnitude"].to_numpy(dtype=float),
         recovar_event_scores=events["RECOVAR-INSTANCE"].to_numpy(dtype=float),
         phasenet_event_scores=events["PhaseNet-INSTANCE"].to_numpy(dtype=float),
@@ -221,7 +221,7 @@ def build_cache():
         full_magnitudes=catalog_events.to_numpy(dtype=float),
         test_event_magnitudes=test_event_magnitudes,
     )
-    return np.load(CACHE)
+    return np.load(CACHE, allow_pickle=True)
 
 
 def histogram_edges(values):
@@ -244,7 +244,7 @@ def save_histogram(values, title, filename):
 
 def analysis_cache():
     if CACHE.exists():
-        cache = np.load(CACHE)
+        cache = np.load(CACHE, allow_pickle=True)
         if "analysis_level" in cache and str(cache["analysis_level"]) == "station_window_v1":
             return cache
     return build_cache()
