@@ -220,6 +220,7 @@ def recovar_preprocess(windows):
     output = detrend(windows.astype(np.float64), axis=2, type="linear")
     output = sosfiltfilt(BUTTERWORTH_SOS, output, axis=2).astype(np.float32)
     output = output[:, :, FILTER_CONTEXT_SAMPLES:FILTER_CONTEXT_SAMPLES + WINDOW_SAMPLES]
+    output -= output.mean(axis=2, keepdims=True)
     norm = np.sqrt(np.sum(np.square(output), axis=2, keepdims=True))
     output /= 1e-37 + norm
     return np.transpose(output, (0, 2, 1))
