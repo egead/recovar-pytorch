@@ -35,12 +35,15 @@ CHECKPOINT_CANDIDATES = [
     Path("/mnt/second_drive/ege/picovar/models/recovar_instance_seisbench_benchmark.pt"),
     Path.home() / "picovar/models/recovar_instance_seisbench_benchmark.pt",
 ]
-PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_scores_partial.npz"
-ANALYSIS_CACHE = REPO / "silivri_all_instance_butterworth_mag_cache.npz"
+PREVIOUS_PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_scores_partial.npz"
+PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_context_scores_partial.npz"
+ANALYSIS_CACHE = REPO / "silivri_all_instance_butterworth_context_mag_cache.npz"
 OUTPUT = REPO / "silivri_all_butterworth_magnitude_analysis"
 SAMPLING_RATE = 100
 SOURCE_SAMPLES = 6000
 WINDOW_SAMPLES = 3000
+FILTER_CONTEXT_SAMPLES = 500
+FILTER_SAMPLES = WINDOW_SAMPLES + 2 * FILTER_CONTEXT_SAMPLES
 BATCH_SIZE = 256
 CPU_THREADS = max(1, len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1)
 NOISE_SAMPLE_SIZE = 40000
@@ -171,9 +174,9 @@ def waveform_index(directory, station):
     return entries
 
 
-def raw_window(entries, station, start, stream_cache):
+def raw_window(entries, station, start, stream_cache, samples=WINDOW_SAMPLES):
     start = UTCDateTime(start.to_pydatetime())
-    end = start + WINDOW_SAMPLES / SAMPLING_RATE
+    end = start + samples / SAMPLING_RATE
     paths = [path for path, file_start, file_end in entries if file_end >= start and file_start <= end]
     if not paths:
         raise RuntimeError(f"no raw waveform overlaps {station} at {start}")
@@ -204,9 +207,9 @@ def raw_window(entries, station, start, stream_cache):
         if np.ma.isMaskedArray(trace.data) and np.ma.getmaskarray(trace.data).any():
             raise RuntimeError(f"data gap in {component} component for {station} at {start}")
         data = np.asarray(trace.data, dtype=np.float32)
-        if len(data) != WINDOW_SAMPLES:
+        if len(data) != samples:
             raise RuntimeError(f"incomplete {component} component for {station} at {start}")
-        components.append(data[:WINDOW_SAMPLES])
+        components.append(data[:samples])
     window = np.stack(components)
     if not np.isfinite(window).all():
         raise RuntimeError(f"non-finite raw waveform for {station} at {start}")
@@ -216,6 +219,7 @@ def raw_window(entries, station, start, stream_cache):
 def recovar_preprocess(windows):
     output = detrend(windows.astype(np.float64), axis=2, type="linear")
     output = sosfiltfilt(BUTTERWORTH_SOS, output, axis=2).astype(np.float32)
+    output = output[:, :, FILTER_CONTEXT_SAMPLES:FILTER_CONTEXT_SAMPLES + WINDOW_SAMPLES]
     norm = np.sqrt(np.sum(np.square(output), axis=2, keepdims=True))
     output /= 1e-37 + norm
     return np.transpose(output, (0, 2, 1))
@@ -252,18 +256,23 @@ def load_partial(descriptors):
     states = np.zeros(count, dtype=np.int8)
     exclusion_reasons = np.full(count, "", dtype="<U512")
     signature = descriptor_signature(descriptors)
-    if PARTIAL_CACHE.exists():
-        partial = np.load(PARTIAL_CACHE)
+    source = PARTIAL_CACHE if PARTIAL_CACHE.exists() else PREVIOUS_PARTIAL_CACHE
+    if source.exists():
+        partial = np.load(source)
         if len(partial["recovar_scores"]) != count or not np.array_equal(partial["signature"].astype(str), signature):
-            raise ValueError(f"partial cache does not match the current Silivri descriptors: {PARTIAL_CACHE}")
-        recovar_scores[:] = partial["recovar_scores"]
-        phasenet_scores[:] = partial["phasenet_scores"]
-        if "states" in partial:
-            states[:] = partial["states"]
+            raise ValueError(f"partial cache does not match the current Silivri descriptors: {source}")
+        if source == PARTIAL_CACHE:
+            recovar_scores[:] = partial["recovar_scores"]
+            phasenet_scores[:] = partial["phasenet_scores"]
+            if "states" in partial:
+                states[:] = partial["states"]
+            else:
+                states[np.isfinite(recovar_scores) & np.isfinite(phasenet_scores)] = 1
+            if "exclusion_reasons" in partial:
+                exclusion_reasons[:] = partial["exclusion_reasons"].astype(str)
         else:
-            states[np.isfinite(recovar_scores) & np.isfinite(phasenet_scores)] = 1
-        if "exclusion_reasons" in partial:
-            exclusion_reasons[:] = partial["exclusion_reasons"].astype(str)
+            phasenet_scores[:] = partial["phasenet_scores"]
+            print(f"PhaseNet scores reused from {source}")
     return recovar_scores, phasenet_scores, states, exclusion_reasons, signature
 
 
@@ -317,7 +326,8 @@ def score_descriptors(descriptors):
                 if station not in indices:
                     indices[station] = waveform_index(directory, station)
                 try:
-                    raw = raw_window(indices[station], station, row.window_start, stream_cache)
+                    context_start = row.window_start - pd.Timedelta(seconds=FILTER_CONTEXT_SAMPLES / SAMPLING_RATE)
+                    raw = raw_window(indices[station], station, context_start, stream_cache, FILTER_SAMPLES)
                 except (KeyError, RuntimeError, ValueError) as error:
                     states[descriptor_index] = -1
                     exclusion_reasons[descriptor_index] = str(error)
@@ -329,11 +339,15 @@ def score_descriptors(descriptors):
                 raw_batch = np.stack(raw_windows)
                 recovar_input = torch.from_numpy(recovar_preprocess(raw_batch)).to(device)
                 recovar_scores[valid_indices] = recovar(recovar_input).cpu().numpy()
-                phasenet_input = torch.from_numpy(phasenet_preprocess(raw_batch)).to(device)
-                phasenet_output = phasenet(phasenet_input)
-                if isinstance(phasenet_output, (tuple, list)):
-                    phasenet_output = phasenet_output[0]
-                phasenet_scores[valid_indices] = (1.0 - phasenet_output[:, noise_index, :]).amax(dim=1).cpu().numpy()
+                phasenet_indices = [index for index in valid_indices if not np.isfinite(phasenet_scores[index])]
+                if phasenet_indices:
+                    positions = [valid_indices.index(index) for index in phasenet_indices]
+                    central = raw_batch[positions, :, FILTER_CONTEXT_SAMPLES:FILTER_CONTEXT_SAMPLES + WINDOW_SAMPLES]
+                    phasenet_input = torch.from_numpy(phasenet_preprocess(central)).to(device)
+                    phasenet_output = phasenet(phasenet_input)
+                    if isinstance(phasenet_output, (tuple, list)):
+                        phasenet_output = phasenet_output[0]
+                    phasenet_scores[phasenet_indices] = (1.0 - phasenet_output[:, noise_index, :]).amax(dim=1).cpu().numpy()
                 states[valid_indices] = 1
             save_partial(recovar_scores, phasenet_scores, states, exclusion_reasons, signature)
             print(f"Detection completed:{batch_index + 1}/{total_batches} excluded:{int((states == -1).sum())}")
