@@ -32,13 +32,13 @@ CATALOG_CANDIDATES = [
     Path.home() / "recovar/silivri_durand_catalog.txt",
 ]
 CHECKPOINT_CANDIDATES = [
-    Path("/mnt/second_drive/ege/picovar/models/recovar_instance_seisbench_benchmark.pt"),
-    Path.home() / "picovar/models/recovar_instance_seisbench_benchmark.pt",
+    Path("/mnt/second_drive/ege/picovar/models/recovar_instance_butterworth_seisbench_benchmark.pt"),
+    Path.home() / "picovar/models/recovar_instance_butterworth_seisbench_benchmark.pt",
 ]
-PREVIOUS_PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_scores_partial.npz"
-PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_context_scores_partial.npz"
-ANALYSIS_CACHE = REPO / "silivri_all_instance_butterworth_context_mag_cache.npz"
-OUTPUT = REPO / "silivri_all_butterworth_magnitude_analysis"
+PREVIOUS_PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_scores_partial_new_train.npz"
+PARTIAL_CACHE = REPO / "silivri_all_instance_butterworth_context_scores_partial_new_train.npz"
+ANALYSIS_CACHE = REPO / "silivri_all_instance_butterworth_context_mag_cache_new_train.npz"
+OUTPUT = REPO / "silivri_all_butterworth_magnitude_analysis_new_train"
 SAMPLING_RATE = 100
 SOURCE_SAMPLES = 6000
 WINDOW_SAMPLES = 3000
