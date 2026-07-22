@@ -26,7 +26,7 @@ from silivri_all_mag_analysis import (
 )
 
 # ----------------- INFERENCE -----------------
-BATCH_SIZE = 256
+BATCH_SIZE = 32
 def recovar_preprocess_normal(windows):
     center = windows[:, :, FILTER_CONTEXT_SAMPLES:FILTER_CONTEXT_SAMPLES + WINDOW_SAMPLES]
     output = center.astype(np.float32)
