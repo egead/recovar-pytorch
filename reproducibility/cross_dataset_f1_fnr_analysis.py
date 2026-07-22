@@ -106,7 +106,6 @@ def get_dataset_obj(dataset_name):
     raise ValueError(f"Unknown dataset {dataset_name}")
 
 def find_best_f1_threshold(event_scores, noise_scores):
-    # If no noise or events, fallback
     if len(event_scores) == 0 or len(noise_scores) == 0:
         return 0.5, 0.0
 
@@ -130,16 +129,108 @@ def find_best_f1_threshold(event_scores, noise_scores):
 def find_fnr_threshold(event_scores, target_fnr):
     if len(event_scores) == 0:
         return 0.5
-    # FNR = False Negative Rate = proportion of events missed = score below threshold
-    # To get target_fnr proportion of events missed, threshold is at target_fnr quantile.
     return np.quantile(event_scores, target_fnr)
+
+
+def plot_summary(ds_summary, ds_name, models_dict_events, output_dir, max_mag=None):
+    if ds_summary.empty:
+        return
+        
+    if max_mag is not None:
+        ds_summary = ds_summary[ds_summary["magnitude_left"] < max_mag].copy()
+        if ds_summary.empty:
+            return
+        suffix = f"_under_mag{int(max_mag)}"
+    else:
+        suffix = ""
+        
+    populated_bins = ds_summary[["magnitude_left", "magnitude_right"]].drop_duplicates().reset_index(drop=True)
+    labels = [f"[{row.magnitude_left:.1f}, {row.magnitude_right:.1f})" for row in populated_bins.itertuples()]
+    x = np.arange(len(labels))
+    
+    criteria = ds_summary["criterion"].unique()
+    fig, axes = plt.subplots(len(criteria), 1, figsize=(12.0, 5.0 * len(criteria)), sharex=True)
+    if len(criteria) == 1:
+        axes = [axes]
+        
+    # Map colors to the underlying pre-trained model origin
+    colors = {
+        'ethz': '#1f77b4', # blue
+        'stead': '#ff7f0e', # orange
+        'instance': '#2ca02c' # green
+    }
+    
+    for axis, criterion in zip(axes, criteria):
+        # Background bars for data volume
+        first_model = ds_summary["model"].iloc[0]
+        count_rows = ds_summary.loc[ds_summary["criterion"].eq(criterion) & ds_summary["model"].eq(first_model)]
+        
+        count_axis = axis.twinx()
+        count_axis.bar(x, count_rows["n_station_records"], width=0.82, color="0.90", edgecolor="none", label="Available records")
+        count_axis.set_ylabel("Records Count", color="0.6")
+        count_axis.tick_params(axis="y", colors="0.6")
+        count_axis.spines["top"].set_visible(False)
+        count_axis.set_zorder(0)
+        
+        axis.set_zorder(1)
+        axis.patch.set_visible(False)
+        
+        min_recall_for_plot = 1.0
+        
+        for m_name in models_dict_events.keys():
+            model_rows = ds_summary.loc[ds_summary["criterion"].eq(criterion) & ds_summary["model"].eq(m_name)]
+            if model_rows.empty:
+                continue
+            
+            values = model_rows["recall"].to_numpy()
+            lower = values - model_rows["recall_ci_lower"].to_numpy()
+            upper = model_rows["recall_ci_upper"].to_numpy() - values
+            
+            valid_lower_bounds = model_rows["recall_ci_lower"].to_numpy()
+            if len(valid_lower_bounds) > 0 and np.nanmin(valid_lower_bounds) < min_recall_for_plot:
+                min_recall_for_plot = np.nanmin(valid_lower_bounds)
+            
+            base_model = m_name.split('-')[1] # ethz, stead, instance
+            is_recovar = "RECOVAR" in m_name
+            
+            # Use styling to differentiate RECOVAR vs PhaseNet
+            axis.errorbar(
+                x, values, yerr=np.vstack([lower, upper]),
+                marker="o" if is_recovar else "s",
+                linestyle="-" if is_recovar else "--",
+                linewidth=2.5 if is_recovar else 1.5,
+                capsize=3.0,
+                color=colors.get(base_model, '#333333'),
+                label=m_name,
+                zorder=3
+            )
+            
+        # Dynamic Zoom: set bottom of y-axis to just below the lowest confidence interval
+        y_bottom = max(0.0, min_recall_for_plot - 0.05)
+        if np.isnan(y_bottom):
+            y_bottom = 0.0
+            
+        axis.set_ylim(y_bottom, 1.05)
+        axis.set_ylabel("Recall")
+        axis.set_title(f"{ds_name.upper()} - Threshold Criterion = {criterion}")
+        axis.grid(axis="y", color="0.85", linewidth=0.8, linestyle='--')
+        axis.set_axisbelow(True)
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.legend(frameon=True, fontsize=10, loc="center left", bbox_to_anchor=(1.12, 0.5), shadow=True)
+        
+    axes[-1].set_xticks(x, labels, rotation=45, ha="right")
+    axes[-1].set_xlabel("Magnitude interval")
+    fig.tight_layout()
+    fig.savefig(output_dir / f"{ds_name}_station_recall_by_magnitude_f1_fnr{suffix}.pdf", bbox_inches="tight")
+    fig.savefig(output_dir / f"{ds_name}_station_recall_by_magnitude_f1_fnr{suffix}.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     DATASETS = ["ethz", "stead", "instance"]
     MODELS = ["ethz", "stead", "instance"]
     
-    # We will have criteria: Max_F1, FNR_0.01, FNR_0.05
     CRITERIA = ["Max_F1"] + [f"FNR_{fnr}" for fnr in TARGET_FNRS]
     
     all_summary_rows = []
@@ -175,13 +266,11 @@ def main():
             recovar_col = f"RECOVAR-{m_name}"
             phasenet_col = f"PhaseNet-{m_name}"
             
-            # Store event scores
             events_df[recovar_col] = recovar_scores[event_rows]
             events_df[phasenet_col] = phasenet_scores[event_rows]
             models_dict_events[recovar_col] = recovar_scores[event_rows]
             models_dict_events[phasenet_col] = phasenet_scores[event_rows]
             
-            # Store noise scores
             models_dict_noise[recovar_col] = recovar_scores[noise_rows]
             models_dict_noise[phasenet_col] = phasenet_scores[noise_rows]
             
@@ -193,12 +282,10 @@ def main():
             valid_event_scores = event_scores[np.isfinite(event_scores)]
             valid_noise_scores = noise_scores[np.isfinite(noise_scores)]
             
-            # 1. Max F1
             best_f1_thresh, best_f1_score = find_best_f1_threshold(valid_event_scores, valid_noise_scores)
             thresholds[model_name]["Max_F1"] = best_f1_thresh
             print(f"  {model_name}: Max F1 threshold = {best_f1_thresh:.4f} (F1 = {best_f1_score:.4f})")
             
-            # 2. FNR targeting
             for fnr in TARGET_FNRS:
                 crit_name = f"FNR_{fnr}"
                 thresh = find_fnr_threshold(valid_event_scores, fnr)
@@ -245,53 +332,11 @@ def main():
             
         ds_summary.to_csv(OUTPUT / f"{ds_name}_station_recall_by_magnitude_f1_fnr.csv", index=False)
         
-        populated_bins = ds_summary[["magnitude_left", "magnitude_right"]].drop_duplicates().reset_index(drop=True)
-        labels = [f"[{row.magnitude_left:.1f}, {row.magnitude_right:.1f})" for row in populated_bins.itertuples()]
-        x = np.arange(len(labels))
+        # 1. Plot entire magnitude range
+        plot_summary(ds_summary, ds_name, models_dict_events, OUTPUT, max_mag=None)
         
-        fig, axes = plt.subplots(len(CRITERIA), 1, figsize=(12.0, 4.0 * len(CRITERIA)), sharex=True)
-        if len(CRITERIA) == 1:
-            axes = [axes]
-            
-        for axis, criterion in zip(axes, CRITERIA):
-            count_rows = ds_summary.loc[ds_summary["criterion"].eq(criterion) & ds_summary["model"].eq(f"RECOVAR-{MODELS[0]}")]
-            if count_rows.empty:
-                # If first model missing, just pick any to get counts
-                any_model = ds_summary["model"].iloc[0]
-                count_rows = ds_summary.loc[ds_summary["criterion"].eq(criterion) & ds_summary["model"].eq(any_model)]
-                
-            count_axis = axis.twinx()
-            count_axis.bar(x, count_rows["n_station_records"], width=0.82, color="0.85", edgecolor="none", label="Available records")
-            count_axis.set_ylabel("Records", color="0.45")
-            count_axis.tick_params(axis="y", colors="0.45")
-            count_axis.spines["top"].set_visible(False)
-            count_axis.set_zorder(0)
-            axis.set_zorder(1)
-            axis.patch.set_visible(False)
-            
-            for m_name in models_dict_events.keys():
-                model_rows = ds_summary.loc[ds_summary["criterion"].eq(criterion) & ds_summary["model"].eq(m_name)]
-                if model_rows.empty:
-                    continue
-                values = model_rows["recall"].to_numpy()
-                lower = values - model_rows["recall_ci_lower"].to_numpy()
-                upper = model_rows["recall_ci_upper"].to_numpy() - values
-                axis.errorbar(x, values, yerr=np.vstack([lower, upper]), marker="o", linewidth=1.7, capsize=2.5, label=m_name, zorder=3)
-                
-            axis.set_ylim(0.0, 1.03)
-            axis.set_ylabel("Recall")
-            axis.set_title(f"{ds_name.upper()} - Criterion = {criterion}")
-            axis.grid(axis="y", color="0.9", linewidth=0.6)
-            axis.set_axisbelow(True)
-            axis.spines[["top", "right"]].set_visible(False)
-            axis.legend(frameon=False, fontsize=8, loc="center left", bbox_to_anchor=(1.1, 0.5))
-            
-        axes[-1].set_xticks(x, labels, rotation=45, ha="right")
-        axes[-1].set_xlabel("Magnitude interval")
-        fig.tight_layout()
-        fig.savefig(OUTPUT / f"{ds_name}_station_recall_by_magnitude_f1_fnr.pdf", bbox_inches="tight")
-        fig.savefig(OUTPUT / f"{ds_name}_station_recall_by_magnitude_f1_fnr.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
+        # 2. Plot ONLY events under magnitude 3.0
+        plot_summary(ds_summary, ds_name, models_dict_events, OUTPUT, max_mag=3.0)
 
     all_summary = pd.DataFrame(all_summary_rows)
     all_summary.to_csv(OUTPUT / "combined_station_recall_by_magnitude_f1_fnr.csv", index=False)
