@@ -35,10 +35,15 @@ def recovar_preprocess_normal(windows):
     return np.transpose(output, (0, 2, 1))
 
 def load_recovar(model_path, device):
+    print(f"DEBUG: Entering load_recovar for {model_path}", flush=True)
     representation = RepresentationLearningMultipleAutoencoder().to(device)
+    print("DEBUG: Representation created.", flush=True)
     state = torch.load(model_path, map_location=device, weights_only=False)
+    print("DEBUG: torch.load finished.", flush=True)
     representation.load_state_dict(state)
+    print("DEBUG: load_state_dict finished.", flush=True)
     recovar = ClassifierMultipleAutoencoder(representation).to(device).eval()
+    print("DEBUG: Classifier created.", flush=True)
     return recovar
 
 def run_silivri_inference():
@@ -93,7 +98,9 @@ def run_silivri_inference():
                 
         print(f"Running inference for {name}...")
         model = load_recovar(path, device)
+        print("DEBUG: Model returned successfully. Allocating scores array...", flush=True)
         scores = np.full(len(descriptors), np.nan, dtype=np.float32)
+        print("DEBUG: Scores array allocated.", flush=True)
         
         total_batches = int(np.ceil(len(descriptors) / BATCH_SIZE))
         with torch.inference_mode():
