@@ -31,20 +31,22 @@ PHASE_COLUMNS = [
 
 def extract_snr(metadata, dataset_name):
     df = metadata.copy()
-    if dataset_name == "stead" and "snr_db" in df.columns:
-        def parse_stead(x):
-            if pd.isna(x): return np.nan, np.nan, np.nan
-            try:
-                s = str(x).replace("[", "").replace("]", "")
-                parts = [p.strip() for p in s.split() if p.strip()]
-                return float(parts[0]), float(parts[1]), float(parts[2])
-            except:
-                return np.nan, np.nan, np.nan
-        
-        parsed = df["snr_db"].apply(parse_stead)
-        df["trace_E_snr_db"] = [p[0] for p in parsed]
-        df["trace_N_snr_db"] = [p[1] for p in parsed]
-        df["trace_Z_snr_db"] = [p[2] for p in parsed]
+    if dataset_name == "stead":
+        snr_col = "trace_snr_db" if "trace_snr_db" in df.columns else "snr_db"
+        if snr_col in df.columns:
+            def parse_stead(x):
+                if pd.isna(x): return np.nan, np.nan, np.nan
+                try:
+                    s = str(x).replace("[", "").replace("]", "")
+                    parts = [p.strip() for p in s.split() if p.strip()]
+                    return float(parts[0]), float(parts[1]), float(parts[2])
+                except:
+                    return np.nan, np.nan, np.nan
+            
+            parsed = df[snr_col].apply(parse_stead)
+            df["trace_E_snr_db"] = [p[0] for p in parsed]
+            df["trace_N_snr_db"] = [p[1] for p in parsed]
+            df["trace_Z_snr_db"] = [p[2] for p in parsed]
         
     if "trace_E_snr_db" in df.columns and "trace_N_snr_db" in df.columns and "trace_Z_snr_db" in df.columns:
         E = pd.to_numeric(df["trace_E_snr_db"], errors="coerce")
