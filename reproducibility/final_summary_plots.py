@@ -98,6 +98,7 @@ def run_silivri_inference():
         total_batches = int(np.ceil(len(descriptors) / BATCH_SIZE))
         with torch.inference_mode():
             for batch_index, begin in enumerate(range(0, len(descriptors), BATCH_SIZE)):
+                print(f"DEBUG: Starting batch {batch_index + 1}/{total_batches}", flush=True)
                 end = min(begin + BATCH_SIZE, len(descriptors))
                 raw_windows = []
                 valid_indices = []
@@ -124,13 +125,16 @@ def run_silivri_inference():
                     except Exception as e:
                         pass
                         
+                print(f"DEBUG: Loaded {len(valid_indices)} windows. Preparing forward pass...", flush=True)
                 if valid_indices:
                     raw_batch = np.stack(raw_windows)
                     recovar_input = torch.from_numpy(recovar_preprocess_normal(raw_batch)).to(device)
+                    print(f"DEBUG: Input shape: {recovar_input.shape}. Passing to model...", flush=True)
                     scores[valid_indices] = model(recovar_input).cpu().numpy()
+                    print(f"DEBUG: Forward pass complete.", flush=True)
                     
-                if (batch_index + 1) % 20 == 0 or (batch_index + 1) == total_batches:
-                    print(f"Batch {batch_index + 1}/{total_batches}")
+                if (batch_index + 1) % 5 == 0 or (batch_index + 1) == total_batches:
+                    print(f"Batch {batch_index + 1}/{total_batches}", flush=True)
                     
         out_dict[f"recovar_{name.lower()}_scores"] = scores
         print(f"Finished {name}.")
