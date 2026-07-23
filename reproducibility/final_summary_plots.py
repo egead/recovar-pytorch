@@ -316,8 +316,9 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
         count_rows = plot_df[plot_df["model"] == first_valid_model].set_index(f"{x_col}_left").reindex(populated_bins[f"{x_col}_left"]).fillna(0)
         ax_h = axes_h[row_idx, 0]
         ax_h.bar(x, count_rows["n_station_records"], width=0.8, color="#94a3b8", edgecolor="none", label="Records")
-        ax_h.set_ylabel("Records Count")
-        ax_h.set_title(f"Dataset: {ds.upper()} | Record Distribution")
+        ax_h.set_ylabel("Event Count")
+        dist_type = "SNR" if x_col == "snr" else "Magnitude"
+        ax_h.set_title(f"Dataset: {ds.upper()} | Event {dist_type} Distribution")
         ax_h.grid(axis="y", color="0.9", linestyle="--")
         ax_h.spines[["top", "right"]].set_visible(False)
         if row_idx == n_rows - 1:
@@ -410,8 +411,8 @@ def plot_silivri(csv_path, out_name):
         
         # Plot Histogram
         ax_h.bar(x, count_rows["n_station_records"], width=0.8, color="#94a3b8", edgecolor="none", label="Records")
-        ax_h.set_ylabel("Records Count")
-        ax_h.set_title(f"SILIVRI | {cfg['title']} | Records")
+        ax_h.set_ylabel("Event Count")
+        ax_h.set_title(f"SILIVRI | {cfg['title']} | Event Magnitude Distribution")
         ax_h.grid(axis="y", color="0.9", linestyle="--")
         ax_h.spines[["top", "right"]].set_visible(False)
         ax_h.set_xticks(x)
