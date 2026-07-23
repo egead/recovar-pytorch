@@ -240,6 +240,8 @@ def run_silivri_analysis():
             thresholds[m_name][crit_name] = thresh
 
     edges = magnitude_edges(events_df["magnitude"].to_numpy())
+    for m_name, e_scores in models_dict_events.items():
+        events_df[m_name] = e_scores
     ds_summary_rows = []
     
     print("Evaluating recall for magnitude bins...")
