@@ -189,7 +189,7 @@ def clustered_recall(frame, score_column, threshold, seed):
     return point, lower, upper
 
 def run_silivri_analysis():
-    PARTIAL_CACHE = REPO / "silivri_all_instance_scores_partial_updated.npz"
+    PARTIAL_CACHE = REPO / "silivri_all_instance_scores_partial.npz"
     OUTPUT = REPO / "silivri_f1_fnr_analysis"
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if not PARTIAL_CACHE.exists():
@@ -220,14 +220,6 @@ def run_silivri_analysis():
         "RECOVAR-INSTANCE": recovar_scores[noise_mask],
         "PhaseNet-INSTANCE": phasenet_scores[noise_mask]
     }
-    if "recovar_dilation_scores" in partial:
-        d_scores = partial["recovar_dilation_scores"]
-        models_dict_events["RECOVAR-Dilation"] = d_scores[event_mask]
-        models_dict_noise["RECOVAR-Dilation"] = d_scores[noise_mask]
-    if "recovar_nodilation_scores" in partial:
-        nd_scores = partial["recovar_nodilation_scores"]
-        models_dict_events["RECOVAR-NoDilation"] = nd_scores[event_mask]
-        models_dict_noise["RECOVAR-NoDilation"] = nd_scores[noise_mask]
     
     thresholds = {}
     CRITERIA = ["Max_F1"] + [f"FNR_{fnr}" for fnr in TARGET_FNRS]
@@ -325,7 +317,9 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
             ax.patch.set_visible(False)
             min_recall = 1.0
             
-            for m_name in pair:
+            width = 0.35
+            offset = width / 2
+            for m_idx, m_name in enumerate(pair):
                 m_df = plot_df[plot_df["model"] == m_name].set_index(f"{x_col}_left").reindex(populated_bins[f"{x_col}_left"])
                 vals = m_df["recall"].to_numpy(dtype=float)
                 valid_mask = ~np.isnan(vals)
@@ -338,14 +332,12 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
                     min_recall = valid_lower.min()
                     
                 is_recovar = "RECOVAR" in m_name
-                ax.errorbar(
-                    x[valid_mask], vals[valid_mask], yerr=[lower[valid_mask], upper[valid_mask]],
-                    marker="o" if is_recovar else "s",
-                    linestyle="-" if is_recovar else "--",
-                    linewidth=2.5 if is_recovar else 1.5,
-                    capsize=3.0,
+                x_pos = x[valid_mask] - offset if m_idx == 0 else x[valid_mask] + offset
+                ax.bar(
+                    x_pos, vals[valid_mask], width=width,
+                    yerr=[lower[valid_mask], upper[valid_mask]],
                     color="#1f77b4" if is_recovar else "#ff7f0e",
-                    label=m_name, zorder=3
+                    label=m_name, zorder=3, alpha=0.9, capsize=3.0
                 )
                 
             y_bot = max(0.0, min_recall - 0.05)
@@ -406,7 +398,9 @@ def plot_silivri(csv_path, out_name):
         ax.patch.set_visible(False)
         min_recall = 1.0
         
-        for m_name in models:
+        width = 0.35
+        offset = width / 2
+        for m_idx, m_name in enumerate(models):
             m_df = plot_df[plot_df["model"] == m_name].set_index("magnitude_left").reindex(populated_bins["magnitude_left"])
             vals = m_df["recall"].to_numpy(dtype=float)
             valid_mask = ~np.isnan(vals)
@@ -419,23 +413,14 @@ def plot_silivri(csv_path, out_name):
                 min_recall = valid_lower.min()
                 
             is_recovar = "RECOVAR" in m_name
-            silivri_colors = {
-                "RECOVAR-INSTANCE": "#1f77b4", 
-                "PhaseNet-INSTANCE": "#ff7f0e", 
-                "RECOVAR-Dilation": "#2ca02c", 
-                "RECOVAR-NoDilation": "#d62728" 
-            }
-            color = silivri_colors.get(m_name, "#333333")
-            marker = "s" if "PhaseNet" in m_name else "o" if "Dilation" not in m_name else "^" if "No" not in m_name else "v"
+            color = "#1f77b4" if is_recovar else "#ff7f0e"
             
-            ax.errorbar(
-                x[valid_mask], vals[valid_mask], yerr=[lower[valid_mask], upper[valid_mask]],
-                marker=marker,
-                linestyle="-" if is_recovar else "--",
-                linewidth=2.5 if is_recovar else 1.5,
-                capsize=3.0,
+            x_pos = x[valid_mask] - offset if m_idx == 0 else x[valid_mask] + offset
+            ax.bar(
+                x_pos, vals[valid_mask], width=width,
+                yerr=[lower[valid_mask], upper[valid_mask]],
                 color=color,
-                label=m_name, zorder=3
+                label=m_name, zorder=3, alpha=0.9, capsize=3.0
             )
             
         y_bot = max(0.0, min_recall - 0.05)
@@ -455,13 +440,10 @@ def plot_silivri(csv_path, out_name):
     plt.close(fig)
 
 def main():
-    print("--- Step 1: Running Inference for New Models on Silivri (if not cached) ---")
-    run_silivri_inference()
-    
-    print("\n--- Step 2: Computing 1% FNR Thresholds for Silivri ---")
+    print("\n--- Step 1: Computing 1% FNR Thresholds for Silivri ---")
     run_silivri_analysis()
 
-    print("\n--- Step 3: Generating Final Summary Plots ---")
+    print("\n--- Step 2: Generating Final Summary Plots ---")
     print("Generating SNR 2x2 Plot (>= 0 dB)...")
     plot_2x2(CSV_SNR, "snr", "snr_2x2_stead_instance.png", min_x=0.0)
     
