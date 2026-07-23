@@ -355,7 +355,7 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
                 
             ax.set_ylim(0.0, 1.0)
             ax.set_ylabel("Recall")
-            ax.set_title(f"Dataset: {ds.upper()} | {col_titles[col_idx]}")
+            ax.set_title(f"Dataset: {ds.upper()} | {col_titles[col_idx]} (1% FNR Threshold)")
             ax.grid(axis="y", color="0.85", linestyle="--")
             ax.spines[["top", "right"]].set_visible(False)
             ax.legend(frameon=True, fontsize=10, loc="lower right", shadow=True)
@@ -442,7 +442,7 @@ def plot_silivri(csv_path, out_name):
             
             ax.set_ylim(0.0, 1.0)
             ax.set_ylabel("Recall")
-        ax.set_title("SILIVRI | Event Recall")
+        ax.set_title("SILIVRI | Event Recall (1% FNR Threshold)")
         ax.grid(axis="y", color="0.85", linestyle="--")
         ax.spines[["top", "right"]].set_visible(False)
         ax.legend(frameon=True, fontsize=10, loc="lower right", shadow=True)
