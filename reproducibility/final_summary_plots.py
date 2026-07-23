@@ -354,9 +354,7 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
                     label=m_name, zorder=3, alpha=0.9, capsize=3.0
                 )
                 
-            y_bot = max(0.0, min_recall - 0.05)
-            if np.isnan(y_bot): y_bot = 0.0
-            ax.set_ylim(y_bot, 1.05)
+            ax.set_ylim(0.0, 1.0)
             ax.set_ylabel("Recall")
             ax.set_title(f"Dataset: {ds.upper()} | {col_titles[col_idx]}")
             ax.grid(axis="y", color="0.85", linestyle="--")
@@ -411,7 +409,7 @@ def plot_silivri(csv_path, out_name):
         # Plot Histogram
         ax_h.bar(x, count_rows["n_station_records"], width=0.8, color="#94a3b8", edgecolor="none", label="Records")
         ax_h.set_ylabel("Event Count")
-        ax_h.set_title(f"SILIVRI | {cfg['title']} | Event Magnitude Distribution")
+        ax_h.set_title("SILIVRI | Event Magnitude Distribution")
         ax_h.grid(axis="y", color="0.9", linestyle="--")
         ax_h.spines[["top", "right"]].set_visible(False)
         ax_h.set_xticks(x)
@@ -444,11 +442,9 @@ def plot_silivri(csv_path, out_name):
                 label=m_name, zorder=3, alpha=0.9, capsize=3.0
             )
             
-        y_bot = max(0.0, min_recall - 0.05)
-        if np.isnan(y_bot): y_bot = 0.0
-        ax.set_ylim(y_bot, 1.05)
-        ax.set_ylabel("Recall")
-        ax.set_title(f"SILIVRI | {cfg['title']}")
+            ax.set_ylim(0.0, 1.0)
+            ax.set_ylabel("Recall")
+        ax.set_title("SILIVRI | Event Recall")
         ax.grid(axis="y", color="0.85", linestyle="--")
         ax.spines[["top", "right"]].set_visible(False)
         ax.legend(frameon=True, fontsize=10, loc="lower right", shadow=True)
