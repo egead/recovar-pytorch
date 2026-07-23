@@ -37,7 +37,7 @@ def extract_snr(metadata, dataset_name):
             def parse_stead(x):
                 if pd.isna(x): return np.nan, np.nan, np.nan
                 try:
-                    s = str(x).replace("[", "").replace("]", "")
+                    s = str(x).replace("[", "").replace("]", "").replace(",", " ").replace("|", " ")
                     parts = [p.strip() for p in s.split() if p.strip()]
                     return float(parts[0]), float(parts[1]), float(parts[2])
                 except:
