@@ -290,33 +290,44 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
     if min_x is not None: df = df[df[f"{x_col}_left"] >= min_x]
     if max_x is not None: df = df[df[f"{x_col}_right"] <= max_x]
         
-    datasets = ["stead", "instance"]
+    available_datasets = df["dataset"].unique().tolist()
+    datasets = [d for d in ["stead", "instance"] if d in available_datasets]
+    if not datasets: return
+    n_rows = len(datasets)
+    
     model_pairs = [["PhaseNet-instance", "RECOVAR-instance"], ["PhaseNet-stead", "RECOVAR-stead"]]
     col_titles = ["Instance Models", "STEAD Models"]
     
-    fig, axes = plt.subplots(2, 2, figsize=(18, 12), sharex=True)
+    # 1) Main Recall Plot
+    fig, axes = plt.subplots(n_rows, 2, figsize=(18, 6 * n_rows), sharex=True, squeeze=False)
+    # 2) Separate Histogram Plot
+    fig_h, axes_h = plt.subplots(n_rows, 1, figsize=(12, 4 * n_rows), sharex=True, squeeze=False)
+    
     for row_idx, ds in enumerate(datasets):
+        plot_df = df[df["dataset"] == ds].copy()
+        if plot_df.empty: continue
+        
+        populated_bins = plot_df[[f"{x_col}_left", f"{x_col}_right"]].drop_duplicates().sort_values(f"{x_col}_left").reset_index(drop=True)
+        labels = [f"[{row[f'{x_col}_left']:.1f}, {row[f'{x_col}_right']:.1f})" for _, row in populated_bins.iterrows()]
+        x = np.arange(len(labels))
+        
+        # Plot Histogram for this dataset (using the first model that has records)
+        first_valid_model = plot_df["model"].iloc[0]
+        count_rows = plot_df[plot_df["model"] == first_valid_model].set_index(f"{x_col}_left").reindex(populated_bins[f"{x_col}_left"]).fillna(0)
+        ax_h = axes_h[row_idx, 0]
+        ax_h.bar(x, count_rows["n_station_records"], width=0.8, color="#94a3b8", edgecolor="none", label="Records")
+        ax_h.set_ylabel("Records Count")
+        ax_h.set_title(f"Dataset: {ds.upper()} | Record Distribution")
+        ax_h.grid(axis="y", color="0.9", linestyle="--")
+        ax_h.spines[["top", "right"]].set_visible(False)
+        if row_idx == n_rows - 1:
+            ax_h.set_xticks(x)
+            ax_h.set_xticklabels(labels, rotation=45, ha="right")
+            ax_h.set_xlabel(f"{'SNR (dB)' if x_col == 'snr' else 'Magnitude'}")
+            
+        # Plot Recalls
         for col_idx, pair in enumerate(model_pairs):
             ax = axes[row_idx, col_idx]
-            plot_df = df[df["dataset"] == ds].copy()
-            if plot_df.empty: continue
-            
-            populated_bins = plot_df[[f"{x_col}_left", f"{x_col}_right"]].drop_duplicates().sort_values(f"{x_col}_left").reset_index(drop=True)
-            labels = [f"[{row[f'{x_col}_left']:.1f}, {row[f'{x_col}_right']:.1f})" for _, row in populated_bins.iterrows()]
-            x = np.arange(len(labels))
-            
-            first_model = pair[0]
-            count_rows = plot_df[plot_df["model"] == first_model].set_index(f"{x_col}_left").reindex(populated_bins[f"{x_col}_left"]).fillna(0)
-            
-            count_ax = ax.twinx()
-            count_ax.bar(x, count_rows["n_station_records"], width=0.8, color="0.9", edgecolor="none", label="Records")
-            count_ax.set_ylabel("Records", color="0.6")
-            count_ax.tick_params(axis="y", colors="0.6")
-            count_ax.spines["top"].set_visible(False)
-            count_ax.set_zorder(0)
-            
-            ax.set_zorder(1)
-            ax.patch.set_visible(False)
             min_recall = 1.0
             
             width = 0.35
@@ -338,7 +349,7 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
                 ax.bar(
                     x_pos, vals[valid_mask], width=width,
                     yerr=[lower[valid_mask], upper[valid_mask]],
-                    color="#1f77b4" if is_recovar else "#ff7f0e",
+                    color="#8B5CF6" if is_recovar else "#10B981",
                     label=m_name, zorder=3, alpha=0.9, capsize=3.0
                 )
                 
@@ -351,7 +362,7 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
             ax.spines[["top", "right"]].set_visible(False)
             ax.legend(frameon=True, fontsize=10, loc="lower right", shadow=True)
             
-            if row_idx == 1:
+            if row_idx == n_rows - 1:
                 ax.set_xticks(x)
                 ax.set_xticklabels(labels, rotation=45, ha="right")
                 ax.set_xlabel(f"{'SNR (dB)' if x_col == 'snr' else 'Magnitude'}")
@@ -359,6 +370,11 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / out_name, dpi=300, bbox_inches="tight")
     plt.close(fig)
+    
+    fig_h.tight_layout()
+    hist_out_name = out_name.replace(".png", "_histogram.png")
+    fig_h.savefig(OUTPUT_DIR / hist_out_name, dpi=300, bbox_inches="tight")
+    plt.close(fig_h)
 
 def plot_silivri(csv_path, out_name):
     if not csv_path.exists():
@@ -367,15 +383,18 @@ def plot_silivri(csv_path, out_name):
         
     df = pd.read_csv(csv_path)
     df = df[df["criterion"] == "FNR_0.01"].copy()
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     
-    configs = [{"ax": axes[0], "title": "Full Magnitude Range", "max_mag": None},
-               {"ax": axes[1], "title": "Zoomed (< Mag 3.0)", "max_mag": 3.0}]
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig_h, axes_h = plt.subplots(1, 2, figsize=(16, 4))
+    
+    configs = [{"ax": axes[0], "ax_h": axes_h[0], "title": "Full Magnitude Range", "max_mag": None},
+               {"ax": axes[1], "ax_h": axes_h[1], "title": "Zoomed (< Mag 3.0)", "max_mag": 3.0}]
     
     models = df["model"].unique().tolist()
     
     for cfg in configs:
         ax = cfg["ax"]
+        ax_h = cfg["ax_h"]
         plot_df = df.copy()
         if cfg["max_mag"] is not None:
             plot_df = plot_df[plot_df["magnitude_right"] <= cfg["max_mag"] + 0.01]
@@ -389,17 +408,17 @@ def plot_silivri(csv_path, out_name):
         first_model = models[0]
         count_rows = plot_df[plot_df["model"] == first_model].set_index("magnitude_left").reindex(populated_bins["magnitude_left"]).fillna(0)
         
-        count_ax = ax.twinx()
-        count_ax.bar(x, count_rows["n_station_records"], width=0.8, color="0.9", edgecolor="none", label="Records")
-        count_ax.set_ylabel("Records Count", color="0.6")
-        count_ax.tick_params(axis="y", colors="0.6")
-        count_ax.spines["top"].set_visible(False)
-        count_ax.set_zorder(0)
+        # Plot Histogram
+        ax_h.bar(x, count_rows["n_station_records"], width=0.8, color="#94a3b8", edgecolor="none", label="Records")
+        ax_h.set_ylabel("Records Count")
+        ax_h.set_title(f"SILIVRI | {cfg['title']} | Records")
+        ax_h.grid(axis="y", color="0.9", linestyle="--")
+        ax_h.spines[["top", "right"]].set_visible(False)
+        ax_h.set_xticks(x)
+        ax_h.set_xticklabels(labels, rotation=45, ha="right")
+        ax_h.set_xlabel("Magnitude")
         
-        ax.set_zorder(1)
-        ax.patch.set_visible(False)
         min_recall = 1.0
-        
         width = 0.35
         offset = width / 2
         for m_idx, m_name in enumerate(models):
@@ -415,7 +434,7 @@ def plot_silivri(csv_path, out_name):
                 min_recall = valid_lower.min()
                 
             is_recovar = "RECOVAR" in m_name
-            color = "#1f77b4" if is_recovar else "#ff7f0e"
+            color = "#8B5CF6" if is_recovar else "#10B981"
             
             x_pos = x[valid_mask] - offset if m_idx == 0 else x[valid_mask] + offset
             ax.bar(
@@ -440,6 +459,11 @@ def plot_silivri(csv_path, out_name):
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / out_name, dpi=300, bbox_inches="tight")
     plt.close(fig)
+    
+    fig_h.tight_layout()
+    hist_out_name = out_name.replace(".png", "_histogram.png")
+    fig_h.savefig(OUTPUT_DIR / hist_out_name, dpi=300, bbox_inches="tight")
+    plt.close(fig_h)
 
 def main():
     print("\n--- Step 1: Computing 1% FNR Thresholds for Silivri ---")
