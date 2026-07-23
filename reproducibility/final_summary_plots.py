@@ -299,9 +299,9 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
     col_titles = ["Instance Models", "STEAD Models"]
     
     # 1) Main Recall Plot
-    fig, axes = plt.subplots(n_rows, 2, figsize=(18, 6 * n_rows), sharex=True, squeeze=False)
+    fig, axes = plt.subplots(n_rows, 2, figsize=(18, 6 * n_rows), sharex=False, squeeze=False)
     # 2) Separate Histogram Plot
-    fig_h, axes_h = plt.subplots(n_rows, 1, figsize=(12, 4 * n_rows), sharex=True, squeeze=False)
+    fig_h, axes_h = plt.subplots(n_rows, 1, figsize=(12, 4 * n_rows), sharex=False, squeeze=False)
     
     for row_idx, ds in enumerate(datasets):
         plot_df = df[df["dataset"] == ds].copy()
@@ -321,10 +321,9 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
         ax_h.set_title(f"Dataset: {ds.upper()} | Event {dist_type} Distribution")
         ax_h.grid(axis="y", color="0.9", linestyle="--")
         ax_h.spines[["top", "right"]].set_visible(False)
-        if row_idx == n_rows - 1:
-            ax_h.set_xticks(x)
-            ax_h.set_xticklabels(labels, rotation=45, ha="right")
-            ax_h.set_xlabel(f"{'SNR (dB)' if x_col == 'snr' else 'Magnitude'}")
+        ax_h.set_xticks(x)
+        ax_h.set_xticklabels(labels, rotation=45, ha="right")
+        ax_h.set_xlabel(f"{'SNR (dB)' if x_col == 'snr' else 'Magnitude'}")
             
         # Plot Recalls
         for col_idx, pair in enumerate(model_pairs):
@@ -361,10 +360,9 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
             ax.spines[["top", "right"]].set_visible(False)
             ax.legend(frameon=True, fontsize=10, loc="lower right", shadow=True)
             
-            if row_idx == n_rows - 1:
-                ax.set_xticks(x)
-                ax.set_xticklabels(labels, rotation=45, ha="right")
-                ax.set_xlabel(f"{'SNR (dB)' if x_col == 'snr' else 'Magnitude'}")
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha="right")
+            ax.set_xlabel(f"{'SNR (dB)' if x_col == 'snr' else 'Magnitude'}")
                 
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / out_name, dpi=300, bbox_inches="tight")
