@@ -53,8 +53,8 @@ def main():
                 "recovar": scores["recovar_event_scores"],
                 "phasenet": scores["phasenet_event_scores"]
             })
-            noise_recovar = scores["recovar_noise_scores"]
-            noise_phasenet = scores["phasenet_noise_scores"]
+            noise_recovar = scores["recovar_noise_validation"]
+            noise_phasenet = scores["phasenet_noise_validation"]
             edges = magnitude_edges(events_df["magnitude"].to_numpy())
         
         fig, axes = plt.subplots(1, 2, figsize=(16, 7))
