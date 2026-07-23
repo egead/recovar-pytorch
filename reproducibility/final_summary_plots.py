@@ -385,11 +385,10 @@ def plot_silivri(csv_path, out_name):
     df = pd.read_csv(csv_path)
     df = df[df["criterion"] == "FNR_0.01"].copy()
     
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    fig_h, axes_h = plt.subplots(1, 2, figsize=(16, 4))
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    fig_h, ax_h = plt.subplots(1, 1, figsize=(8, 4))
     
-    configs = [{"ax": axes[0], "ax_h": axes_h[0], "title": "Full Magnitude Range", "max_mag": None},
-               {"ax": axes[1], "ax_h": axes_h[1], "title": "Zoomed (< Mag 3.0)", "max_mag": 3.0}]
+    configs = [{"ax": ax, "ax_h": ax_h, "title": "Full Magnitude Range", "max_mag": None}]
     
     models = df["model"].unique().tolist()
     
@@ -477,8 +476,8 @@ def main():
     print("Generating Magnitude 2x2 Plot...")
     plot_2x2(CSV_MAG, "magnitude", "magnitude_2x2_stead_instance.png")
     
-    print("Generating Silivri 1x2 Plot...")
-    plot_silivri(CSV_SILIVRI, "magnitude_1x2_silivri.png")
+    print("Generating Silivri Plot...")
+    plot_silivri(CSV_SILIVRI, "magnitude_silivri.png")
     
     print(f"\nAll plots saved to: {OUTPUT_DIR}")
 
