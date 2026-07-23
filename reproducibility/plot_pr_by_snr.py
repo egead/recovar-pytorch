@@ -25,6 +25,8 @@ def main():
         noise_rows = descriptors["label"].eq("no").to_numpy()
         event_rows = descriptors["label"].eq("eq").to_numpy()
         
+        edges = snr_edges(events_df["snr"].to_numpy())
+        
         for m_name in ["stead", "instance"]:
             cache_path = CACHE_DIR / f"cache_{dataset.__class__.__name__}_{m_name}.npz"
             if not cache_path.exists():
