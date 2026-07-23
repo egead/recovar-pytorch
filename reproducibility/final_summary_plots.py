@@ -366,11 +366,13 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
                 
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / out_name, dpi=300, bbox_inches="tight")
+    fig.savefig(OUTPUT_DIR / out_name.replace(".png", ".pdf"), bbox_inches="tight")
     plt.close(fig)
     
     fig_h.tight_layout()
     hist_out_name = out_name.replace(".png", "_histogram.png")
     fig_h.savefig(OUTPUT_DIR / hist_out_name, dpi=300, bbox_inches="tight")
+    fig_h.savefig(OUTPUT_DIR / hist_out_name.replace(".png", ".pdf"), bbox_inches="tight")
     plt.close(fig_h)
 
 def plot_silivri(csv_path, out_name):
@@ -452,11 +454,13 @@ def plot_silivri(csv_path, out_name):
             
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / out_name, dpi=300, bbox_inches="tight")
+    fig.savefig(OUTPUT_DIR / out_name.replace(".png", ".pdf"), bbox_inches="tight")
     plt.close(fig)
     
     fig_h.tight_layout()
     hist_out_name = out_name.replace(".png", "_histogram.png")
     fig_h.savefig(OUTPUT_DIR / hist_out_name, dpi=300, bbox_inches="tight")
+    fig_h.savefig(OUTPUT_DIR / hist_out_name.replace(".png", ".pdf"), bbox_inches="tight")
     plt.close(fig_h)
 
 def main():
