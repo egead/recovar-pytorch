@@ -349,7 +349,7 @@ def plot_2x2(csv_path, x_col, out_name, min_x=None, max_x=None):
                 ax.bar(
                     x_pos, vals[valid_mask], width=width,
                     yerr=[lower[valid_mask], upper[valid_mask]],
-                    color="#8B5CF6" if is_recovar else "#10B981",
+                    color="#E11D48" if is_recovar else "#10B981",
                     label=m_name, zorder=3, alpha=0.9, capsize=3.0
                 )
                 
@@ -434,7 +434,7 @@ def plot_silivri(csv_path, out_name):
                 min_recall = valid_lower.min()
                 
             is_recovar = "RECOVAR" in m_name
-            color = "#8B5CF6" if is_recovar else "#10B981"
+            color = "#E11D48" if is_recovar else "#10B981"
             
             x_pos = x[valid_mask] - offset if m_idx == 0 else x[valid_mask] + offset
             ax.bar(
