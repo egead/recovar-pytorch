@@ -6,3 +6,4 @@ h5py==3.16.0
 obspy==1.5.0
 matplotlib==3.10.3
 seaborn==0.13.2
+seisbench==0.11.7
