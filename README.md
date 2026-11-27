@@ -82,3 +82,13 @@ jupyter notebook crlbd_test.ipynb
 - Event windows are 30 s cut 5 s before the P pick (S pick if there is no P). Noise windows start at the trace start. 
 - Windows are bandpassed 1 to 20 Hz before scoring.
 - Set `MAX_TRACES` to an integer for a quick run on a subset.
+
+## Funding
+
+This work is part of the [TRANSFORM²](https://www.transform2-project.eu/) project which aims to improve physical and digital infrastructure across Near-Fault Observatories (NFOs) in Europe.
+
+TRANSFORM² is funded by the European Union under project number 101188365 within the HORIZON-INFRA-2024-DEV-01-01 call.
+
+<div align="center">
+  <img src="https://www.transform2-project.eu/wp-content/uploads/2022/08/Logo_TRANSFORM2-round-logo-100x100-1.png" alt="TRANSFORM² logo">
+</div>
